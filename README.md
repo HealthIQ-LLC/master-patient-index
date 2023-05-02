@@ -1,7 +1,7 @@
 # master-patient-index
 Enterprise Master Patent Index
 
-#Requirements
+# Requirements
 Developed with Docker version 23.0.5, build bc4487a  
 Python 3.10  
 Flask 2.2.2  
