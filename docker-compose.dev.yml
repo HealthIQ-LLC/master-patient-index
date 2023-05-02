@@ -21,7 +21,7 @@ services:
     environment:
       - POSTGRES_USER=compadre
       - POSTGRES_PASSWORD=ToClimbChiding!
-      - POSTGRES_DB=compadre
+      - POSTGRES_DB=compadre_dev
 
 volumes:
   postgres_data:
