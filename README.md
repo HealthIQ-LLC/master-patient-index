@@ -17,7 +17,7 @@ sudo docker compose exec db psql --username=compadre --dbname=compadre
 ## .env.dev
 FLASK_APP=project/__init__.py  
 FLASK_DEBUG=1  
-DATABASE_URL=postgresql://<username>:<password>!@db:5432/<database>  
+DATABASE_URL=postgresql://`username`:`password`!@db:5432/`database`  
 SQL_HOST=db  
 SQL_PORT=5432  
 DATABASE=postgres  
@@ -26,13 +26,13 @@ APP_FOLDER=/usr/src/app
 ## .env.prod
 FLASK_APP=project/__init__.py  
 FLASK_DEBUG=1  
-DATABASE_URL=postgresql://<username>:<password>!@db:5432/<database>  
+DATABASE_URL=postgresql://`username`:`password`!@db:5432/`database`  
 SQL_HOST=db  
 SQL_PORT=5432  
 DATABASE=postgres  
 APP_FOLDER=/home/app/web  
 
 ## .env.prod.db
-POSTGRES_USER=<username>  
-POSTGRES_PASSWORD=<password>  
-POSTGRES_DB=<database>  
+POSTGRES_USER=`username`  
+POSTGRES_PASSWORD=`password`  
+POSTGRES_DB=`database`  
