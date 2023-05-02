@@ -1,14 +1,13 @@
 from sqlalchemy import and_, or_
 from time import time
 
-from .app import app
 from .matching import (
     compare_nameday_equal, 
     compare_ssn_equal, 
     wrap_address_check, 
     wrap_name_check
 )
-from .model import db, Demographic
+from .model import Demographic
 
 
 def parse_result(metrics: dict) -> bool:
@@ -109,8 +108,6 @@ def compute_all_matches(demographic_record) -> (list, str):
     """
     :param demographic_record: The input demographics record
     """
-    with app.app_context():
-        db.create_all()
         coarse_matcher, fine_matcher = MODES[MODE]
         start = time()
         computed_matches = []

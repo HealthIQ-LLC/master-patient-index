@@ -1,4 +1,5 @@
 from services.web.project import timeit
+from services.web.project.app import app
 from services.web.project.data_utils import demographics_record
 from services.web.project.engine import (
     compute_all_matches,
@@ -6,31 +7,35 @@ from services.web.project.engine import (
     fine_matching,
     parse_result,
 )
-
+from services.web.project.model import db
 
 @timeit
 def test_compute_all_matches():
-    key = "test_compute_all_matches"
-    input_fixture = demographics_record(key)
-    expected_result = {
-            'address_matching': None,
-            'model_score': None,
-            'name_matching': None,
-            'name_day_matching': None,
-            'ssn_matching': None
-    }
-    actual_results, _ = compute_all_matches(input_fixture)
-    for actual_result in actual_results:
-        assert actual_result.keys() == expected_result.keys()
+    with app.app_context():
+        db.create_all()
+        key = "test_compute_all_matches"
+        input_fixture = demographics_record(key)
+        expected_result = {
+                'address_matching': None,
+                'model_score': None,
+                'name_matching': None,
+                'name_day_matching': None,
+                'ssn_matching': None
+        }
+        actual_results, _ = compute_all_matches(input_fixture)
+        for actual_result in actual_results:
+            assert actual_result.keys() == expected_result.keys()
 
 
 @timeit
 def test_coarse_matching():
-    key = "test_coarse_matching"
-    input_fixture = demographics_record(key)
-    expected_result = []
-    actual_result = coarse_matching(input_fixture)
-    assert expected_result == actual_result
+    with app.app_context():
+        db.create_all()
+        key = "test_coarse_matching"
+        input_fixture = demographics_record(key)
+        expected_result = []
+        actual_result = coarse_matching(input_fixture)
+        assert expected_result == actual_result
 
 
 @timeit
