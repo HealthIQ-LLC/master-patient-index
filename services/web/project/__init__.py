@@ -1,6 +1,7 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
+import json
 import sys
 from time import time
 
@@ -86,9 +87,11 @@ def process_payload(client_request, endpoint: str):
         print("Request is not JSON", file=debug_route)
         return jsonify(status=405, response=response)
     try:
-        payload_obj = json.loads(input_json)
-    except:
+        #payload_obj = json.loads(input_json)
+         payload_obj = input_json 
+    except Exception as e:
         print("Request will not deserialize", file=debug_route)
+        print(e, file=debug_route)
         return jsonify(status=405, response=response)
     if client_request.method == "GET":
         response = get(payload_obj, endpoint)
