@@ -67,21 +67,20 @@ def fine_matching(record_a: dict, record_b: dict):
 
 
 def toy_coarse_matching(demographic_record) -> list:
-    with app.app_context():
-        record_id = demographic_record.get('record_id', None)
-        postal_code = demographic_record.get('postal_code')
-        name_day = demographic_record.get('name_day')
-        family_name = demographic_record.get('family_name')
-        coarse_results = []
-        source_table = Demographic
-        query = Demographic.query
-        query = query.filter(or_(
-            source_table.__table__.c['postal_code'] == postal_code,
-            source_table.__table__.c['name_day'] == name_day,
-            source_table.__table__.c['family_name'] == family_name))\
-            .filter(and_(source_table.__table__.c['record_id'] != record_id))
-        for row in query.all():
-            coarse_results.append(row)
+    record_id = demographic_record.get('record_id', None)
+    postal_code = demographic_record.get('postal_code')
+    name_day = demographic_record.get('name_day')
+    family_name = demographic_record.get('family_name')
+    coarse_results = []
+    source_table = Demographic
+    query = Demographic.query
+    query = query.filter(or_(
+        source_table.__table__.c['postal_code'] == postal_code,
+        source_table.__table__.c['name_day'] == name_day,
+        source_table.__table__.c['family_name'] == family_name))\
+        .filter(and_(source_table.__table__.c['record_id'] != record_id))
+    for row in query.all():
+        coarse_results.append(row)
 
     return coarse_results
 
@@ -108,13 +107,13 @@ def compute_all_matches(demographic_record) -> (list, str):
     """
     :param demographic_record: The input demographics record
     """
-        coarse_matcher, fine_matcher = MODES[MODE]
-        start = time()
-        computed_matches = []
-        for coarse_match in coarse_matcher(demographic_record):
-            if demographic_record.get('record_id') != coarse_match.get('record_id'):
-                computed_matches.append(fine_matcher(demographic_record, coarse_match))
-        end = time()
-        exec_time = f"{end - start:.8f}"
+    coarse_matcher, fine_matcher = MODES[MODE]
+    start = time()
+    computed_matches = []
+    for coarse_match in coarse_matcher(demographic_record):
+        if demographic_record.get('record_id') != coarse_match.get('record_id'):
+            computed_matches.append(fine_matcher(demographic_record, coarse_match))
+    end = time()
+    exec_time = f"{end - start:.8f}"
 
     return computed_matches, exec_time
