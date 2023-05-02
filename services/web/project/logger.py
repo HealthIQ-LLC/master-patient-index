@@ -27,4 +27,4 @@ def setup_logger(name, log_file, level=logging.DEBUG):
     return logger
 
 
-mylogger = make_logger(f"EMPI_{version}")
+mylogger = make_logger(f"empi_{version}")
