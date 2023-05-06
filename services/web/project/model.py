@@ -14,16 +14,17 @@ def key_gen(user, version):
     :param version: the EMPI software version employed by the command at the time
     :return etl_id: the unique ID created for this job
     """
-    staged_key_record = {
-        "id_created_ts": datetime.now(),
-        "user": user,
-        "version": version
-    }
-    etl_id_source_record = ETLIDSource(**staged_key_record)
-    db.session.add(etl_id_source_record)
-    db.session.commit()
-    db.session.refresh(etl_id_source_record)
-    etl_id = etl_id_source_record.etl_id
+    with app.app_context():
+        staged_key_record = {
+            "id_created_ts": datetime.now(),
+            "user": user,
+            "version": version
+        }
+        etl_id_source_record = ETLIDSource(**staged_key_record)
+        db.session.add(etl_id_source_record)
+        db.session.commit()
+        db.session.refresh(etl_id_source_record)
+        etl_id = etl_id_source_record.etl_id
 
     return etl_id
 

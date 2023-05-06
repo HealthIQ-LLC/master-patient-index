@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
 import json
 import sys
+import threading
 from time import time
 
 from .app import app
@@ -82,16 +83,9 @@ def process_payload(client_request, endpoint: str):
     """
     response = None
     try:
-        input_json = client_request.get_json()
+        payload_obj = client_request.get_json()
     except:
-        print("Request is not JSON", file=debug_route)
-        return jsonify(status=405, response=response)
-    try:
-        #payload_obj = json.loads(input_json)
-         payload_obj = input_json 
-    except Exception as e:
-        print("Request will not deserialize", file=debug_route)
-        print(e, file=debug_route)
+        print("Request is not acceptable JSON", file=debug_route)
         return jsonify(status=405, response=response)
     if client_request.method == "GET":
         response = get(payload_obj, endpoint)

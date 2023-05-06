@@ -1,6 +1,7 @@
 from datetime import datetime
 import sys
 
+from .app import app
 from .logger import mylogger
 from .model import (
     db,
@@ -24,20 +25,21 @@ class AuditStamp:
         self.row = None
 
     def __call__(self, row, foreign_record_id):
-        self.proc_id = key_gen(self.user, self.version)
-        self.row = row
-        self.i2_transaction_key = f"{self.batch_id}_{self.proc_id}"
-        staged_proc_record = {
-            "batch_id": self.batch_id,
-            "proc_id": self.proc_id,
-            "proc_status": "PENDING",
-            "i2_transaction_key": self.i2_transaction_key,
-            "row": self.row,
-            "foreign_record_id": foreign_record_id
-        }
-        proc_record = Process(**staged_proc_record)
-        db.session.add(proc_record)
-        db.session.commit()
+        with app.app_context():
+            self.proc_id = key_gen(self.user, self.version)
+            self.row = row
+            self.transaction_key = f"{self.batch_id}_{self.proc_id}"
+            staged_proc_record = {
+                "batch_id": self.batch_id,
+                "proc_id": self.proc_id,
+                "proc_status": "PENDING",
+                "transaction_key": self.transaction_key,
+                "row": self.row,
+                "foreign_record_id": foreign_record_id
+            }
+            proc_record = Process(**staged_proc_record)
+            db.session.add(proc_record)
+            db.session.commit()
 
         return self.proc_id
 

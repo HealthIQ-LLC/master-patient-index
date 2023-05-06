@@ -67,10 +67,10 @@ def fine_matching(record_a: dict, record_b: dict):
 
 
 def toy_coarse_matching(demographic_record) -> list:
-    record_id = demographic_record.get('record_id', None)
-    postal_code = demographic_record.get('postal_code')
-    name_day = demographic_record.get('name_day')
-    family_name = demographic_record.get('family_name')
+    record_id = demographic_record.record_id
+    postal_code = demographic_record.postal_code
+    name_day = demographic_record.name_day
+    family_name = demographic_record.family_name
     coarse_results = []
     source_table = Demographic
     query = Demographic.query
