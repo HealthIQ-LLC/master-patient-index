@@ -9,7 +9,7 @@ import Levenshtein as Lev
 import re
 
 
-def pairwise_string_metrics(a: str, b: str):
+def pairwise_string_metrics(a: str, b: str) -> dict:
     return {
         "damerau_levenshtein_distance": damerau_levenshtein_distance(a, b),
         "equal": a == b,
@@ -22,31 +22,31 @@ def pairwise_string_metrics(a: str, b: str):
     }
 
 
-def string_replacer(a: str, b: str, pattern: str, repl: str):
+def string_replacer(a: str, b: str, pattern: str, repl: str) -> (str, str):
     return a.replace(pattern, repl), b.replace(pattern, repl)
 
 
-def string_slicer(a: str, b: str, factor: int):
+def string_slicer(a: str, b: str, factor: int) -> (str, str):
     return a[:factor], b[:factor]
 
 
-def string_trimmer(a: str, b: str):
+def string_trimmer(a: str, b: str) -> (str, str):
     return a.strip(), b.strip()
 
 
-def compare_strings_equal(a: str, b: str):
+def compare_strings_equal(a: str, b: str) -> bool:
     return a == b
 
 
-def compare_nameday_equal(a, b): # use this to implement your own datetime-related tests
+def compare_nameday_equal(a, b) -> bool: # use this to implement your own datetime-related tests
     return a == b
 
 
-def compare_ssn_equal(a, b): # use this to implement your own heightened security posture
+def compare_ssn_equal(a, b) -> bool: # use this to implement your own heightened security posture
     return a == b
 
 
-def slice_string_check(a: str, b: str, slice_min=3):
+def slice_string_check(a: str, b: str, slice_min=3) -> (bool, int):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -67,7 +67,7 @@ def slice_string_check(a: str, b: str, slice_min=3):
     return slice_result, 0
 
 
-def alpha_composite_name_check(a: str, b: str):
+def alpha_composite_name_check(a: str, b: str) -> (bool, str, str):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -80,7 +80,7 @@ def alpha_composite_name_check(a: str, b: str):
     return result, a_sub, b_sub
 
 
-def family_name_check(a: str, b: str):
+def family_name_check(a: str, b: str) -> (bool, dict):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -103,7 +103,7 @@ def family_name_check(a: str, b: str):
     return result, metrics
 
 
-def given_name_check(a: str, b: str):
+def given_name_check(a: str, b: str) -> (bool, dict):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -125,7 +125,7 @@ def given_name_check(a: str, b: str):
     return result, metrics
     
 
-def middle_name_check(a: str, b: str):
+def middle_name_check(a: str, b: str) -> (bool, dict):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -145,7 +145,7 @@ def middle_name_check(a: str, b: str):
     return result, metrics
 
 
-def address_check(a: str, b: str):
+def address_check(a: str, b: str) -> (bool, dict):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -163,7 +163,7 @@ def address_check(a: str, b: str):
     return result, metrics
 
 
-def postal_check(a: str, b: str):
+def postal_check(a: str, b: str) -> (bool, dict):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
@@ -178,7 +178,7 @@ def postal_check(a: str, b: str):
     return result, metrics
 
 
-def wrap_address_check(record_a: dict, record_b: dict):
+def wrap_address_check(record_a: dict, record_b: dict) -> dict:
     """
     :record_a: one record series to be compared
     :record_b: one record series to be compared
@@ -204,7 +204,7 @@ def wrap_address_check(record_a: dict, record_b: dict):
     }
 
 
-def wrap_name_check(record_a: dict, record_b: dict):
+def wrap_name_check(record_a: dict, record_b: dict) -> dict:
     """
     :record_a: one record series to be compared
     :record_b: one record series to be compared

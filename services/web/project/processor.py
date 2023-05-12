@@ -28,9 +28,8 @@ from .model import (
 def mint_transaction_key(auditor, row=None, foreign_record_id=None):
     """
     :param auditor: native Auditor class object for data warehousing
-    :param row: a requirement of the auditor, counted for demographics batches and set to None for behaviors
-    :param foreign_record_id: if minting is for a new Demographic record, we store the primary key originating from
-    source record as a foreign key
+    :param row: used when counting rows in tables
+    :param foreign_record_id: the primary key from demographic record origin
     """
     ts = datetime.datetime.now()
     proc_id = auditor.stamp(row, foreign_record_id)
@@ -39,10 +38,10 @@ def mint_transaction_key(auditor, row=None, foreign_record_id=None):
     return transaction_key, proc_id, auditor.batch_id, auditor.user, ts
 
 
-def transact_records(record, table: str):
+def transact_records(record, table: str) -> int:
     """
     :param record: a sqla data object for insertion into an appropriate table
-    :param table: a string identifying the table for purposes of identifying the pkey to return for any given statement
+    :param table: a string identifying a table
     """
     with app.app_context():
         db.session.add(record)
@@ -166,7 +165,7 @@ def demographic(payload: dict, auditor) -> dict:
     return metrics
 
 
-def activate_demographic(payload: dict, auditor):
+def activate_demographic(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed by EMPI
     :param auditor: native Auditor class object for data warehousing

@@ -1,7 +1,6 @@
 from flask import Flask, jsonify, request, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from functools import wraps
-import json
 import sys
 import threading
 from time import time
@@ -12,7 +11,7 @@ from .logger import mylogger, version
 from .model import db
 from .processor import ACTION_MAP, query_records
 
-debug_route = sys.stderr
+DEBUG_ROUTE = sys.stderr
 
 
 def timeit(func):
@@ -26,7 +25,8 @@ def timeit(func):
         start = time()
         result = func(*args, **kwargs)
         end = time()
-        print(f"{func.__name__} executed in {end - start:.4f} seconds", file=debug_route)
+        print(f"{func.__name__} executed in {end - start:.4f} seconds", 
+            file=DEBUG_ROUTE)
         return result
 
     return wrapper
@@ -42,24 +42,25 @@ def hello_world():
     return jsonify(hello="world")
 
 
-def get(payload: dict, endpoint: str):
+def get(payload: dict, endpoint: str) -> dict:
     """
     :param payload: the user-initiated data payload to GET with
-    :param endpoint: a string which maps endpoint to destination model to act on
+    :param endpoint: a string denoting the endpoint invoked
     """
     response = query_records(payload, table=endpoint)
 
     return response
 
 
-def post(payload: dict, endpoint: str):
+def post(payload: dict, endpoint: str) -> dict:
     """
     :param payload: the user-initiated data payload to POST with
-    :param endpoint: a string which maps endpoint to destination model to act on
+    :param endpoint: a string denoting the endpoint invoked
     """
     user = payload['user']
     with Auditor(user, version, endpoint) as job_auditor:
-        thread = threading.Thread(target=ACTION_MAP[endpoint], args=(payload, job_auditor))
+        thread = threading.Thread(target=ACTION_MAP[endpoint], 
+            args=(payload, job_auditor))
         thread.start()
     try:
         batch_key = job_auditor.batch_id
@@ -78,14 +79,14 @@ def post(payload: dict, endpoint: str):
 @timeit
 def process_payload(client_request, endpoint: str):
     """
-    :param client_request: the flask request object produced by the client for use in an operation
-    :param endpoint: a string representing the endpoint employed by this API call
+    :param client_request: the client request object supplied by Flask
+    :param endpoint: a string denoting the endpoint invoked
     """
     response = None
     try:
         payload_obj = client_request.get_json()
     except:
-        print("Request is not acceptable JSON", file=debug_route)
+        print("Request is not acceptable JSON", file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
     if client_request.method == "GET":
         response = get(payload_obj, endpoint)
@@ -94,7 +95,8 @@ def process_payload(client_request, endpoint: str):
     if response is not None:
         return jsonify(status=200, response=response)
     else:
-        print(f"Issue encountered with {client_request.method} request", file=debug_route)
+        print(f"Issue encountered with {client_request.method} request", 
+            file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
 
 

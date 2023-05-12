@@ -6,7 +6,7 @@ from .app import app
 db = SQLAlchemy(app)
 
 
-def key_gen(user, version):
+def key_gen(user: str, version: str) -> int:
     """
     :param user: the username issuing any command is stored in the etl id source table
     :param version: the EMPI software version employed by the command at the time

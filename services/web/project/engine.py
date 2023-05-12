@@ -19,7 +19,7 @@ def parse_result(metrics: dict) -> bool:
         return False
 
 
-def toy_fine_matching(record_a, record_b):
+def toy_fine_matching(record_a, record_b) -> dict:
     stride = 0.3
     match_score = 0
     threshold = 0.5
@@ -40,7 +40,7 @@ def toy_fine_matching(record_a, record_b):
     return toy_fine_match
 
 
-def fine_matching(record_a: dict, record_b: dict):
+def fine_matching(record_a: dict, record_b: dict) -> dict:
     """
     :param record_a: the new demographics record 
     :param record_b: the coarse match record against which the new record is tested

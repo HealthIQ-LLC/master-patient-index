@@ -13,8 +13,7 @@ from .model import (
 
 class AuditStamp:
     """
-    This convenience class provides a callable method wielded by the Auditor class (see below).
-    The AuditStamp manages task-level context.
+    The AuditStamp manages context at the task level.
     """
     def __init__(self, batch_id, user, version):
         self.batch_id = batch_id
@@ -44,12 +43,13 @@ class AuditStamp:
         return self.proc_id
 
     def __str__(self):
-        return f"<AuditStamp: {self.batch_id}:{self.proc_id}:{self.record_id}:{self.row}:{self.user}>"
+        return f"<AuditStamp: \
+{self.batch_id}:{self.proc_id}:{self.record_id}:{self.row}:{self.user}>"
 
 
 class Auditor:
     """
-    The Auditor is a context manager at the batch/api-request level. The Auditor wields the AuditStamp (see above)
+    The Auditor is a context manager at the batch/api-request level.
     """
     def __init__(self, user, version, action):
         self.user = user
