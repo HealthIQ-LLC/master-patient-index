@@ -185,7 +185,7 @@ class EnterpriseGroup(db.Model, SerializerMixin):  # the record of pairwise assi
     __tablename__ = "enterprise_group"
     etl_id = db.Column(db.BigInteger, primary_key=True)
     enterprise_id = db.Column(db.BigInteger)
-    record_id = db.Column(db.BigInteger, unique=True)
+    record_id = db.Column(db.BigInteger, unique=True, index=True)
     transaction_key = db.Column(db.Text, index=True)
     touched_by = db.Column(db.Text)
     touched_ts = db.Column(db.DateTime)

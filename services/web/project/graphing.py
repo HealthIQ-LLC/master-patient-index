@@ -3,11 +3,20 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from sqlalchemy import or_
 from sqlalchemy.dialects.postgresql import insert
+import sys
 
 from .app import app
 from .data_utils import SYSTEM_USER
 from .logger import version
-from .model import db, Bulletin, EnterpriseGroup, EnterpriseMatch, key_gen
+from .model import (
+    db, 
+    Batch, 
+    Bulletin, 
+    EnterpriseGroup, 
+    EnterpriseMatch, 
+    key_gen, 
+    Process
+    )
 
 MATCH_THRESHOLD = 0.5
 NODE_SIZE = 150
@@ -37,18 +46,22 @@ class GraphReCursor:
         with app.app_context():
             response = list()
             matched_records = self.matched_records
+            print(f'{matched_records} recursive 1', file=sys.stderr)
             graph_size = self.graph_size
             for record_id in matched_records:
                 if record_id not in self.already_matched:
+                    print(f'{record_id} recursive 2', file=sys.stderr)
                     query = db.session.query(EnterpriseMatch).\
                         filter(
-                        EnterpriseMatch.is_valid is True,
-                        or_(
+                            or_(
                             EnterpriseMatch.record_id_low == record_id,
-                            EnterpriseMatch.record_id_high == record_id,
+                            EnterpriseMatch.record_id_high == record_id
                             )
-                    )
+                        )
+                    # filter(
+                    # EnterpriseMatch.is_valid is True).\
                     for row in query.all():
+                        print(f"recursive match record found {row}", file=sys.stderr)
                         a = row.record_id_low
                         b = row.record_id_high
                         weight = row.match_weight
@@ -58,6 +71,7 @@ class GraphReCursor:
                             response.append(b)
                     self.already_matched.append(record_id)
             response_set = set(response)
+            print(f"response set found {response_set}", file=sys.stderr)
             for item in response_set:
                 matched_records.add(item)
             new_graph_size = len(matched_records)
@@ -168,36 +182,53 @@ class GraphCursor:
         with app.app_context():
             user = SYSTEM_USER
             transaction_key = f"{self.batch_id}_{self.proc_id}"
+            ts = datetime.datetime.now()
+            threshold = self.config.get("match_threshold")
             for a, b, weight in self.config.get("nodes_and_weights"):
-                ts = datetime.datetime.now()
-                if weight >= self.config.get("match_threshold"):
-                    if a < b:
-                        low = a
-                        high = b
+                if a < b:
+                    low = a
+                    high = b
+                else:
+                    low = b
+                    high = a
+                if weight >= threshold:
+                    results = db.session.query(EnterpriseMatch).\
+                    filter(
+                        EnterpriseMatch.record_id_low == low,
+                        EnterpriseMatch.record_id_high == high
+                        ).first()
+                    if results is None:
+                        etl_id = key_gen(user, version)
+                        print(f'ETL id {etl_id}', file=sys.stderr)
+                        staged_match_record = {
+                            "etl_id": etl_id,
+                            "record_id_low": low,
+                            "record_id_high": high,
+                            "match_weight": weight,
+                            "transaction_key": transaction_key,
+                            "is_valid": True,
+                            "touched_by": user,
+                            "touched_ts": ts
+                        }
+                        statement = insert(EnterpriseMatch).values(**staged_match_record).on_conflict_do_nothing()
+                        db.session.execute(statement)
+                        db.session.commit()
                     else:
-                        low = b
-                        high = a
-                    etl_id = key_gen(user, version)
-                    staged_match_record = {
-                        "etl_id": etl_id,
-                        "record_id_low": low,
-                        "record_id_high": high,
-                        "match_weight": weight,
-                        "transaction_key": transaction_key,
-                        "is_valid": True,
-                        "created_by": user,
-                        "created_ts": ts,
-                        "touched_by": user,
-                        "touched_ts": ts
-                    }
-                    statement = insert(EnterpriseMatch).values(**staged_match_record).on_conflict_do_nothing()
-                    db.session.execute(statement)
-                    db.session.commit()
+                        etl_id = results.etl_id
                     self.new_matches.append(etl_id)
+                elif weight < threshold:
+                    db.session.query(EnterpriseMatch).filter(EnterpriseMatch.record_id_low == low,
+                        EnterpriseMatch.record_id_high == high).\
+                        update({EnterpriseMatch.is_valid: False}, synchronize_session=False)
+                    db.session.commit()
             group_list = list()
+            print(self.new_matches, file=sys.stderr)
             for etl_id in self.new_matches:
+                print(f'etl id {etl_id}', file=sys.stderr)
                 response = []
-                query = db.session.query(EnterpriseMatch).filter(EnterpriseMatch.etl_id == etl_id)
+                query = db.session.query(EnterpriseMatch).filter(
+                    EnterpriseMatch.etl_id == etl_id
+                    )
                 for row in query.all():
                     response.append(row.to_dict())
                 record_high = response[0].get("record_id_high")
@@ -205,39 +236,47 @@ class GraphCursor:
                 record_low = response[0].get("record_id_low")
                 group_list.append(record_low)
             group_set = set(group_list)
-            for record_id in group_set:
-                ts = datetime.datetime.now()
-                etl_id = key_gen(user, version)
-                staged_group_record = {
-                    "etl_id": etl_id,
-                    "enterprise_id": self.enterprise_id,
-                    "record_id": record_id,
-                    "transaction_key": transaction_key,
-                    "created_by": user,
-                    "created_ts": ts
-                }
-                statement = insert(EnterpriseGroup).values(**staged_group_record).on_conflict_do_update(
-                    where=(EnterpriseGroup.c.enterprise_id != self.enterprise_id),
-                    set_=dict(transaction_key=transaction_key, created_ts=ts, enterprise_id=self.enterprise_id),
-                )
-                db.session.execute(statement)
-                db.session.commit()
-                query = db.session.query(EnterpriseGroup).filter("created_ts" == ts)
-                # store bulletin record if necessary
-                if len(query.first() == 1):  # this activity upserted a group record, so we issue the bulletin
-                    staged_graph_bulletin_record = {
-                        "etl_id": key_gen(user, version),
-                        "batch_id": self.batch_id,
-                        "proc_id": self.proc_id,
+            #ToDo: confirm not deacc by transaction key
+            response = db.session.query(Process).filter(
+                Process.transaction_key == transaction_key
+                ).first()
+            batch_key = response.batch_id
+            response = db.session.query(Batch).filter(
+                Batch.batch_id == batch_key).first()
+            batch_action = response.batch_action
+            if batch_action not in ['deactivate_demographic', 'delete_demographic']:
+                for record_id in group_set:
+                    etl_id = key_gen(user, version)
+                    staged_group_record = {
+                        "etl_id": etl_id,
+                        "enterprise_id": self.enterprise_id,
                         "record_id": record_id,
-                        "empi_id": self.enterprise_id,
                         "transaction_key": transaction_key,
-                        "bulletin_ts": ts
+                        "touched_by": user,
+                        "touched_ts": ts
                     }
-                    statement = insert(Bulletin).values(**staged_graph_bulletin_record)
+                    statement = insert(EnterpriseGroup).values(**staged_group_record).on_conflict_do_update(
+                        index_elements=[EnterpriseGroup.record_id], where=(EnterpriseGroup.enterprise_id != self.enterprise_id),
+                        set_=dict(transaction_key=transaction_key, touched_ts=ts, enterprise_id=self.enterprise_id),
+                    )
                     db.session.execute(statement)
                     db.session.commit()
-                    self.new_groups.append(etl_id)  
+                    result = db.session.query(EnterpriseGroup).filter(EnterpriseGroup.touched_ts == ts).all()
+                    # store bulletin record if necessary
+                    if len(result) > 0:  # this activity upserted a group record, so we issue the bulletin
+                        staged_graph_bulletin_record = {
+                            "etl_id": key_gen(user, version),
+                            "batch_id": self.batch_id,
+                            "proc_id": self.proc_id,
+                            "record_id": record_id,
+                            "empi_id": self.enterprise_id,
+                            "transaction_key": transaction_key,
+                            "bulletin_ts": ts
+                        }
+                        statement = insert(Bulletin).values(**staged_graph_bulletin_record)
+                        db.session.execute(statement)
+                        db.session.commit()
+                        self.new_groups.append(etl_id)  
 
     def store_graph_image(self):
         self.plot.savefig(f"{self.enterprise_id}.png")

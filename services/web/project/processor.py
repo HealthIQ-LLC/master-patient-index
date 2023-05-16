@@ -1,7 +1,9 @@
-import datetime
+from datetime import datetime
+
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 import sys
+from time import sleep
 
 from .app import app
 from .data_utils import apply_record_metadata
@@ -12,6 +14,7 @@ from .model import (
     db,
     key_gen,
     MODEL_MAP,
+    Batch,
     Delete,
     Demographic,
     DemographicActivation,
@@ -31,7 +34,7 @@ def mint_transaction_key(auditor, row=None, foreign_record_id=None):
     :param row: used when counting rows in tables
     :param foreign_record_id: the primary key from demographic record origin
     """
-    ts = datetime.datetime.now()
+    ts = datetime.now()
     proc_id = auditor.stamp(row, foreign_record_id)
     transaction_key = auditor.stamp.transaction_key
 
@@ -88,6 +91,12 @@ def update_status(batch_id, proc_id, message):
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
             update({Process.proc_status: message}, synchronize_session=False)
         db.session.commit()
+        batch_check_query = db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_status == 'PENDING')
+        if len(batch_check_query.all()) == 0:
+            db.session.query(Batch).filter(Batch.batch_id == batch_id).\
+                update({Batch.batch_status: "COMPUTED"}, synchronize_session=False)
+            db.session.commit()
 
 
 def demographic(payload: dict, auditor) -> dict:
@@ -115,8 +124,11 @@ def demographic(payload: dict, auditor) -> dict:
         	foreign_record_id=foreign_record_id
         	)
         name_day_input = record.get('name_day', None)
-        name_day_format = '%Y%m%d'
-        name_day_datetime = datetime.datetime.strptime(name_day_input, name_day_format)
+        if type(name_day_input) is str:
+            name_day_format = '%Y%m%d'
+            name_day_datetime = datetime.strptime(name_day_input, name_day_format)
+        elif type(name_day_input) is datetime:
+            name_day_datetime = name_day_input
         try:
             staged_record = {
                 "record_id": key_gen(user, version),
@@ -156,10 +168,13 @@ def demographic(payload: dict, auditor) -> dict:
                     metrics["skipped_count"] += 1
                 except Exception as error_msg:
                     print(error_msg, file=sys.stderr)
-            if record_id is not None:
-                print(record_id, file=sys.stderr)
-                update_status(batch_id, proc_id, "POSTED")
-                activate_demographic({"record_id": record_id}, auditor)
+                if record_id is not None:
+                    db.session.query(Process). \
+                        filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+                        update({Process.proc_record_id: record_id}, synchronize_session=False)
+                    db.session.commit()
+                    update_status(batch_id, proc_id, "POSTED")
+                    activate_demographic({"record_id": record_id}, auditor)
         row += 1
 
     return metrics
@@ -170,15 +185,11 @@ def activate_demographic(payload: dict, auditor) -> int:
     :param payload: a dict representing a json/dict-like record to be computed by EMPI
     :param auditor: native Auditor class object for data warehousing
     """
-    print(payload, file=sys.stderr)
     with app.app_context():
         transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
         record_id = payload.get("record_id")
-        print(record_id, file=sys.stderr)
         db.session.query(Demographic).\
-            filter(
-                "record_id" == record_id
-                ).\
+            filter(Demographic.record_id == record_id).\
             update(
             {
                 Demographic.is_active: True,
@@ -187,6 +198,9 @@ def activate_demographic(payload: dict, auditor) -> int:
             },
             synchronize_session=False
         )
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: record_id}, synchronize_session=False)
         db.session.commit()
         db.session.query(EnterpriseMatch).\
             filter(EnterpriseMatch.is_valid is False,
@@ -205,14 +219,13 @@ def activate_demographic(payload: dict, auditor) -> int:
         )
         db.session.commit()
         record = db.session.query(Demographic).filter(Demographic.record_id == record_id).first()
-        print(record, file=sys.stderr)
-        computed_matches = compute_all_matches(record)
+        computed_matches, _ = compute_all_matches(record)
         nodes_and_weights = list()
         for computed_match in computed_matches:
             tup = (
-                computed_match.record_a_id,
-                computed_match.record_b_id,
-                computed_match.score
+                computed_match['record_a_id'],
+                computed_match['record_b_id'],
+                computed_match['score']
             )
             nodes_and_weights.append(tup)
         graph = GraphCursor(nodes_and_weights, batch_id, proc_id)
@@ -238,12 +251,18 @@ def archive_demographic(record_id: int, auditor):
         transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
         record_to_archive = db.session.query(Demographic).\
             filter(Demographic.record_id == record_id).first()
-        record_to_archive["archive_transaction_key"] = record_to_archive.get("transaction_key")
-        record_to_archive["transaction_key"] = transaction_key
-        record_to_archive["touched_by"] = user
-        record_to_archive["touched_ts"] = touched_ts
+        record_to_archive.archive_transaction_key = record_to_archive.transaction_key
+        record_to_archive.transaction_key = transaction_key
+        record_to_archive.touched_by = user
+        record_to_archive.touched_ts = touched_ts
+        record_to_archive = record_to_archive.__dict__
+        del record_to_archive['_sa_instance_state']
         archive_record = DemographicArchive(**record_to_archive)
-        archive_id = transact_records(archive_record, "archive")
+        archive_id = transact_records(archive_record, "archive_demographic")
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: archive_id}, synchronize_session=False)
+        db.session.commit()
         update_status(batch_id, proc_id, "ARCHIVED")
 
     return archive_id
@@ -259,10 +278,9 @@ def deactivate_demographic(payload: dict, auditor):
         transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
         record_id = payload.get("record_id")
         recursor = GraphReCursor(record_id)
+        print(f'deac nodes and weights 1 {recursor.nodes_and_weights}', file=sys.stderr)
         db.session.query(Demographic).\
-            filter(
-                "record_id" == record_id
-                ).\
+            filter(Demographic.record_id == record_id).\
             update(
             {
                 Demographic.is_active: False,
@@ -274,12 +292,11 @@ def deactivate_demographic(payload: dict, auditor):
         db.session.commit()
         db.session.query(EnterpriseMatch). \
             filter(
-                EnterpriseMatch.is_valid is True,
             or_(
                 EnterpriseMatch.record_id_low == record_id,
                 EnterpriseMatch.record_id_high == record_id,
-            )
-        ).\
+                )
+            ).\
             update(
             {
                 EnterpriseMatch.is_valid: False,
@@ -289,13 +306,24 @@ def deactivate_demographic(payload: dict, auditor):
             synchronize_session=False
         )
         db.session.commit()
+        #ToDo: update in case where rm is the enterprise id item
+        #results = EnterpriseGroup.query.filter_by(enterprise_id=record_id).all()
         EnterpriseGroup.query.filter_by(record_id=record_id).delete()
+        EnterpriseGroup.query.filter_by(enterprise_id=record_id).delete()
         db.session.commit()
         for matched_record in recursor.matched_records:
-            if matched_record != record_id:
-                inner_recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(inner_recursor.nodes_and_weights, batch_id, proc_id)
-                graph()
+            print(matched_record, file=sys.stderr)
+            #if matched_record != record_id:
+            inner_recursor = GraphReCursor(matched_record)
+            print(f'deac nodes and weights 2 {inner_recursor.nodes_and_weights}', file=sys.stderr)
+            graph = GraphCursor(inner_recursor.nodes_and_weights, batch_id, proc_id)
+            graph()
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: record_id}, synchronize_session=False)
+        db.session.commit()
+        EnterpriseMatch.query.filter_by(is_valid=False).delete()
+        db.session.commit()
         update_status(batch_id, proc_id, "DEACTIVATED")
         staged_demo_deac_record = {
             "etl_id": key_gen(user, version),
@@ -319,6 +347,10 @@ def delete_demographic(payload: dict, auditor):
         archive_demographic(record_id, auditor)
         Demographic.query.filter_by(record_id=record_id).delete()
         db.session.commit()
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: record_id}, synchronize_session=False)
+        db.session.commit()
         update_status(batch_id, proc_id, "DELETED DEMOGRAPHIC")
         staged_demo_delete_record = {
             "etl_id": key_gen(user, version),
@@ -335,63 +367,67 @@ def delete_action(payload: dict, auditor):
     :param payload: a dict representing a json/dict-like record to be computed by EMPI
     :param auditor: native Auditor class object for data warehousing
     """
-    transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
-    payload_batch_id = payload['batch_id']
-    payload_proc_id = payload['proc_id']
-    select_transaction_key = f'{payload_batch_id}_{payload_proc_id}'
-    action = payload['action']
-    if action == 'delete':
-        delete_record = DemographicDelete.query.filter_by(transaction_key=select_transaction_key).first()
-        record_id = delete_record.record_id
-        demographic_record = DemographicArchive.query.filter_by(record_id=record_id).first()
-        del demographic_record['archive_transaction_key']
-        demographic_record["transaction_key"] = auditor.transaction_key
-        demographic_record["touched_by"] = user
-        demographic_record["touched_ts"] = touched_ts
-        demo_payload = dict()
-        demo_payload['demographics'] = [demographic_record]
-        demographic(demo_payload, auditor)
-        DemographicArchive.query.filter_by(record_id=record_id).delete()
-        active_payload = {'record_id': record_id}
-        activate_demographic(active_payload, auditor)
-    else:
-        record_id_low = record_id_high = None
-        if action == 'affirm':
-            affirm_record = MatchAffirmation.query.filter_by(transaction_key=select_transaction_key).first()
-            record_id_low = affirm_record.record_id_low
-            record_id_high = affirm_record.record_id_high
-            del_affirm_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
-            deny_matching(del_affirm_payload, auditor)
-        elif action == 'deny':
-            deny_record = MatchDenial.query.filter_by(transaction_key=select_transaction_key).first()
-            record_id_low = deny_record.record_id_low
-            record_id_high = deny_record.record_id_high
-            del_deny_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
-            affirm_matching(del_deny_payload, auditor)
-        recursor_low = GraphReCursor(record_id_low)
-        recursor_high = GraphReCursor(record_id_high)
-        already_matched = list()
-        for matched_record in recursor_low.matched_records:
-            if matched_record not in already_matched:
-                recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
-                graph()
-                already_matched.append(matched_record)
-        for matched_record in recursor_high.matched_records:
-            if matched_record not in already_matched:
-                recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
-                graph()
-                already_matched.append(matched_record)
-    update_status(batch_id, proc_id, f"DELETED {action}")
-    staged_record = {
-        "etl_id": key_gen(user, version),
-        "batch_action": action,
-        "archive_proc_id": payload_proc_id,
-        "archive_batch_id": payload_batch_id,
-        "transaction_key": transaction_key,
-    }
-    delete_action_record = Delete(**staged_record)
+    with app.app_context():
+        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        payload_batch_id = payload['batch_id']
+        payload_proc_id = payload['proc_id']
+        select_transaction_key = f'{payload_batch_id}_{payload_proc_id}'
+        action = payload['action']
+        if action == 'delete':
+            delete_record = DemographicDelete.query.filter_by(transaction_key=select_transaction_key).first()
+            record_id = delete_record.record_id
+            demographic_record = DemographicArchive.query.filter_by(record_id=record_id).first().__dict__
+            del demographic_record['archive_transaction_key']
+            demographic_record["transaction_key"] = transaction_key
+            demographic_record["touched_by"] = user
+            demographic_record["touched_ts"] = touched_ts
+            demo_payload = dict()
+            demo_payload['demographics'] = [demographic_record]
+            demographic(demo_payload, auditor)
+            DemographicArchive.query.filter_by(record_id=record_id).delete()
+            active_payload = {'record_id': record_id}
+            db.session.query(Process). \
+                filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+                update({Process.proc_record_id: record_id}, synchronize_session=False)
+            db.session.commit()
+        else:
+            record_id_low = record_id_high = None
+            if action == 'affirm':
+                affirm_record = MatchAffirmation.query.filter_by(transaction_key=select_transaction_key).first()
+                record_id_low = affirm_record.record_id_low
+                record_id_high = affirm_record.record_id_high
+                del_affirm_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
+                deny_matching(del_affirm_payload, auditor)
+            elif action == 'deny':
+                deny_record = MatchDenial.query.filter_by(transaction_key=select_transaction_key).first()
+                record_id_low = deny_record.record_id_low
+                record_id_high = deny_record.record_id_high
+                del_deny_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
+                affirm_matching(del_deny_payload, auditor)
+            recursor_low = GraphReCursor(record_id_low)
+            recursor_high = GraphReCursor(record_id_high)
+            already_matched = list()
+            for matched_record in recursor_low.matched_records:
+                if matched_record not in already_matched:
+                    recursor = GraphReCursor(matched_record)
+                    graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                    graph()
+                    already_matched.append(matched_record)
+            for matched_record in recursor_high.matched_records:
+                if matched_record not in already_matched:
+                    recursor = GraphReCursor(matched_record)
+                    graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                    graph()
+                    already_matched.append(matched_record)
+        update_status(batch_id, proc_id, f"DELETED {action}")
+        staged_record = {
+            "etl_id": key_gen(user, version),
+            "batch_action": action,
+            "archive_proc_id": payload_proc_id,
+            "archive_batch_id": payload_batch_id,
+            "transaction_key": transaction_key,
+        }
+        delete_action_record = Delete(**staged_record)
 
     return transact_records(delete_action_record, "delete")
 
@@ -414,7 +450,7 @@ def affirm_matching(payload: dict, auditor):
         weight = record.match_weight
         weight += 1
         db.session.query(EnterpriseMatch). \
-            filter("etl_id" == etl_id). \
+            filter(EnterpriseMatch.etl_id == etl_id). \
             update(
             {
                 EnterpriseMatch.match_weight: weight,
@@ -423,6 +459,10 @@ def affirm_matching(payload: dict, auditor):
             },
             synchronize_session=False
         )
+        db.session.commit()
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: etl_id}, synchronize_session=False)
         db.session.commit()
         recursor_low = GraphReCursor(record_id_low)
         recursor_high = GraphReCursor(record_id_high)
@@ -469,7 +509,7 @@ def deny_matching(payload: dict, auditor):
         weight = record.match_weight
         weight -= 1
         db.session.query(EnterpriseMatch).\
-            filter("etl_id" == etl_id).\
+            filter(EnterpriseMatch.etl_id == etl_id).\
             update(
             {
                 "match_weight": weight,
@@ -478,17 +518,23 @@ def deny_matching(payload: dict, auditor):
             }
         )
         db.session.commit()
+        db.session.query(Process). \
+            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            update({Process.proc_record_id: etl_id}, synchronize_session=False)
+        db.session.commit()
         recursor_low = GraphReCursor(record_id_low)
         recursor_high = GraphReCursor(record_id_high)
         already_matched = list()
         for matched_record in recursor_low.matched_records:
             if matched_record not in already_matched:
+                print(f"{recursor.nodes_and_weights} low", file=sys.stderr)
                 recursor = GraphReCursor(matched_record)
                 graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
                 graph()
                 already_matched.append(matched_record)
         for matched_record in recursor_high.matched_records:
             if matched_record not in already_matched:
+                print(f"{recursor.nodes_and_weights} high", file=sys.stderr)
                 recursor = GraphReCursor(matched_record)
                 graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
                 graph()

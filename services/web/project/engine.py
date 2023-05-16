@@ -1,4 +1,5 @@
 from sqlalchemy import and_, or_
+import sys
 from time import time
 
 from .matching import (
@@ -23,15 +24,15 @@ def toy_fine_matching(record_a, record_b) -> dict:
     stride = 0.3
     match_score = 0
     threshold = 0.5
-    if record_a.get(postal_code) == record_b.get('postal_code'):
+    if record_a.postal_code == record_b.postal_code:
         match_score += stride
-    if record_a.get(name_day) == record_b.get('name_day'):
+    if record_a.name_day == record_b.name_day:
         match_score += stride
-    if record_a.get(family_name) == record_b.get('family_name'):
+    if record_a.family_name == record_b.family_name:
         match_score += stride
     toy_fine_match = {
-        "record_a_id": record_a.get('record_id'),
-        "record_b_id": record_b.get('record_id'),
+        "record_a_id": record_a.record_id,
+        "record_b_id": record_b.record_id,
         "score": match_score,
         "threshold": threshold
     }
@@ -51,11 +52,11 @@ def fine_matching(record_a: dict, record_b: dict) -> dict:
                   "model_score": None,
                   "name_matching": wrap_name_check(record_a, record_b),
                   "name_day_matching": compare_nameday_equal(
-                    record_a.get("name_day", None), record_b.get("name_day", None)
+                    record_a.name_day, record_b.name_day
                     ),
                   "ssn_matching": compare_ssn_equal(
-                    record_a.get("social_security_number", None), 
-                    record_b.get("social_security_number", None)
+                    record_a.social_security_number, 
+                    record_b.social_security_number,
                     ),
                   "score": 0,
                   "threshold": 0}
@@ -81,6 +82,7 @@ def toy_coarse_matching(demographic_record) -> list:
         .filter(and_(source_table.__table__.c['record_id'] != record_id))
     for row in query.all():
         coarse_results.append(row)
+        print(row, file=sys.stderr)
 
     return coarse_results
 
@@ -111,7 +113,7 @@ def compute_all_matches(demographic_record) -> (list, str):
     start = time()
     computed_matches = []
     for coarse_match in coarse_matcher(demographic_record):
-        if demographic_record.get('record_id') != coarse_match.get('record_id'):
+        if demographic_record.record_id != coarse_match.record_id:
             computed_matches.append(fine_matcher(demographic_record, coarse_match))
     end = time()
     exec_time = f"{end - start:.8f}"
