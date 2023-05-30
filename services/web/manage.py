@@ -1,6 +1,6 @@
 import click
 from flask.cli import FlaskGroup
-from project import app, db, ACTION_MAP, Auditor, model, query_records
+from project import app, db, COUPLER, Auditor
 
 cli = FlaskGroup(app)
 
@@ -65,7 +65,7 @@ def empi_post(
         payload['record_id_low'] = record_id_low
         payload['record_id_high'] = record_id_high
     with Auditor(user, version, endpoint) as job_auditor:
-        response = ACTION_MAP[endpoint](payload, job_auditor)
+        response = COUPLER[endpoint]['processor'](payload, job_auditor)
     click.echo(f'{response}')
 
 
@@ -141,7 +141,7 @@ def empi_get(
     for k, v in payload.items():
         if v is None:
             del payload[k]
-    response = query_records(payload, endpoint)
+    response = COUPLER['query_records']['processor'](payload, endpoint)
     for row in response:
         click.echo(f'{row}')
 

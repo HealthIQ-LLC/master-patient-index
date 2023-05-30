@@ -7,9 +7,8 @@ from time import time
 
 from .app import app
 from .auditor import Auditor
+from .coupler import COUPLER, DemographicsGetValidator, db
 from .logger import mylogger, version
-from .model import db
-from .processor import ACTION_MAP, query_records
 
 DEBUG_ROUTE = sys.stderr
 
@@ -47,8 +46,8 @@ def get(payload: dict, endpoint: str) -> dict:
     :param payload: the user-initiated data payload to GET with
     :param endpoint: a string denoting the endpoint invoked
     """
-    response = query_records(payload, table=endpoint)
-
+    response = COUPLER['query_records']['processor'](payload, endpoint=endpoint)
+    
     return response
 
 
@@ -58,8 +57,9 @@ def post(payload: dict, endpoint: str) -> dict:
     :param endpoint: a string denoting the endpoint invoked
     """
     user = payload['user']
+    processor = COUPLER[endpoint]['processor']
     with Auditor(user, version, endpoint) as job_auditor:
-        thread = threading.Thread(target=ACTION_MAP[endpoint], 
+        thread = threading.Thread(target=processor, 
             args=(payload, job_auditor))
         thread.start()
     try:
@@ -77,120 +77,40 @@ def post(payload: dict, endpoint: str) -> dict:
 
 
 @timeit
-def process_payload(client_request, endpoint: str):
-    """
-    :param client_request: the client request object supplied by Flask
-    :param endpoint: a string denoting the endpoint invoked
-    """
+def process_payload():
     response = None
+    endpoint = request.endpoint
+    method = request.method
+    validator = COUPLER[endpoint]['validator']()
+    if endpoint == 'demographic' and method == 'GET':
+        validator = DemographicsGetValidator()
     try:
-        payload_obj = client_request.get_json()
+        payload_obj = request.get_json()
     except:
         print("Request is not acceptable JSON", file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
-    if client_request.method == "GET":
-        response = get(payload_obj, endpoint)
-    elif client_request.method == "POST":
-        response = post(payload_obj, endpoint)
+    result, msg = validator.validate(payload_obj)
+    if result:
+        if method == "GET":
+            response = get(payload_obj, endpoint)
+        elif method == "POST":
+            response = post(payload_obj, endpoint)
+    else:
+        print(f"Invalid request payload: {msg}", file=DEBUG_ROUTE)
+        return jsonify(status=405, response=msg)
     if response is not None:
         return jsonify(status=200, response=response)
     else:
-        print(f"Issue encountered with {client_request.method} request", 
+        print(f"Issue encountered with {method} request", 
             file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
 
 
-@app.route(f"/api_{version}/delete_action", methods=["GET", "POST"])
-def api_delete():
-    """
-    delete actions endpoint.
-    """
-    return process_payload(request, "delete_action")
-
-
-@app.route(f"/api_{version}/demographic", methods=["GET", "POST"])
-def api_demographic():
-    """
-    demographic endpoint.
-    """
-    return process_payload(request, "demographic")
-
-
-@app.route(f"/api_{version}/activate_demographic", methods=["GET", "POST"])
-def api_activate_demographic():
-    """
-    demographic record activation endpoint.
-    """
-    return process_payload(request, "activate_demographic")
-
-
-@app.route(f"/api_{version}/archive_demographic", methods=["GET"])
-def api_archived_demographic():
-    """
-    archived demographic endpoint.
-    """
-    return process_payload(request, "archive_demographic")
-
-
-@app.route(f"/api_{version}/deactivate_demographic", methods=["GET", "POST"])
-def api_deactivate_demographic():
-    """
-    Demographics record deactivation endpoint.
-    """
-    return process_payload(request, "deactivate_demographic")
-
-
-@app.route(f"/api_{version}/delete_demographic", methods=["GET", "POST"])
-def api_delete_demographic():
-    """
-    Demographics record delete endpoint.
-    """
-    return process_payload(request, "delete_demographic")
-
-
-@app.route(f"/api_{version}/batch", methods=["GET"])
-def api_batch():
-    """
-    batch endpoint.
-    """
-    return process_payload(request, "batch")
-
-
-@app.route(f"/api_{version}/bulletin", methods=["GET"])
-def api_bulletin():
-    """
-    patient graph updates endpoint.
-    """
-    return process_payload(request, "bulletin")
-
-
-@app.route(f"/api_{version}/process", methods=["GET"])
-def api_process():
-    """
-    process endpoint.
-    """
-    return process_payload(request, "process")
-
-
-@app.route(f"/api_{version}/match_affirm", methods=["GET", "POST"])
-def api_match_affirmation():
-    """
-    match affirmations endpoint.
-    """
-    return process_payload(request, "match_affirm")
-
-
-@app.route(f"/api_{version}/match_deny", methods=["GET", "POST"])
-def api_match_denial():
-    """
-    match denials endpoint.
-    """
-    return process_payload(request, "match_deny")
-
-
-@app.route(f"/api_{version}/telecom", methods=["GET"])
-def api_telecom():
-    """
-    Telecom endpoint.
-    """
-    return process_payload(request, "telecom")
+# register all API endpoints via the COUPLER
+for endpoint, couplings in COUPLER.items():
+    app.add_url_rule(
+        f'/api_{version}/{endpoint}',
+        endpoint=endpoint, 
+        view_func=process_payload,
+        methods=couplings['methods']
+    )

@@ -205,21 +205,20 @@ class EnterpriseMatch(db.Model, SerializerMixin):  # the record of pairwise matc
     touched_by = db.Column(db.Text)
     touched_ts = db.Column(db.DateTime)
 
-
 MODEL_MAP = {
-    "delete_action": Delete,
-    "demographic": Demographic,
     "activate_demographic": DemographicActivation,
     "archive_demographic": DemographicArchive,
-    "deactivate_demographic": DemographicDeactivation,
-    "delete_demographic": DemographicDelete,
-    "enterprise_group": EnterpriseGroup,
-    "enterprise_match": EnterpriseMatch,
     "batch": Batch,
     "bulletin": Bulletin,
-    "process": Process,
+    "deactivate_demographic": DemographicDeactivation,
+    "delete_action": Delete,
+    "delete_demographic": DemographicDelete,
+    "demographic": Demographic,
+    "enterprise_group": EnterpriseGroup,
+    "enterprise_match": EnterpriseMatch,
+    "etl_id_source": ETLIDSource,
     "match_affirm": MatchAffirmation,
     "match_deny": MatchDenial,
+    "process": Process,
     "telecom": Telecom,
-    "etl_id_source": ETLIDSource
 }

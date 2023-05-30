@@ -13,7 +13,6 @@ from .logger import version
 from .model import (
     db,
     key_gen,
-    MODEL_MAP,
     Batch,
     Delete,
     Demographic,
@@ -25,8 +24,10 @@ from .model import (
     EnterpriseGroup,
     Process,
     MatchAffirmation,
-    MatchDenial
+    MatchDenial,
+    MODEL_MAP
 )
+
 
 def mint_transaction_key(auditor, row=None, foreign_record_id=None):
     """
@@ -62,13 +63,13 @@ def transact_records(record, table: str) -> int:
     return record_id
 
 
-def query_records(payload: dict, table="demographic") -> list:
+def query_records(payload: dict, endpoint="demographic") -> list:
     """
     :param payload: a list of key/value constraints to use in filtering
     :param table: a string mapped to the sqla data model of tables
     """
     response = list()
-    source_table = MODEL_MAP[table]
+    source_table = MODEL_MAP[endpoint]
     query = source_table.query
     try:
         del payload['user']
@@ -550,8 +551,7 @@ def deny_matching(payload: dict, auditor):
 
     return transact_records(denial_record, "deny")
 
-
-ACTION_MAP = {
+PROCESSOR_MAP = {
     "delete_action": delete_action,
     "demographic": demographic,
     "activate_demographic": activate_demographic,
