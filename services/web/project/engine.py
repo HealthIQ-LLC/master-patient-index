@@ -59,11 +59,11 @@ def fine_matching(record_a: dict, record_b: dict) -> dict:
                   "model_score": None,
                   "name_matching": wrap_name_check(record_a, record_b),
                   "name_day_matching": compare_nameday_equal(
-                    record_a.name_day, record_b.name_day
+                    record_a.name_day, record_b.name_day    # type: ignore
                     ),
                   "ssn_matching": compare_ssn_equal(
-                    record_a.social_security_number, 
-                    record_b.social_security_number,
+                    record_a.social_security_number,  # type: ignore
+                    record_b.social_security_number,  # type: ignore
                     ),
                   "score": 0,
                   "threshold": 0}
@@ -98,11 +98,12 @@ def coarse_matching(demographics_record) -> list:
     """
     :param demographics_record: The input demographics record
     """
-    #ToDo: implement data-aware coarse matching technique
-    #This bypass leaves coarse matching in guaranteed toy mode for now
+    # ToDo: implement data-aware coarse matching technique
+    # This bypass leaves coarse matching in guaranteed toy mode for now
     coarse_results = toy_coarse_matching(demographics_record)
 
     return coarse_results
+
 
 MODES = {  # implement any kind of blocking / filtering by setting a mode here
     "toy": (toy_coarse_matching, toy_fine_matching),

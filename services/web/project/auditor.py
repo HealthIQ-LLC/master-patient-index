@@ -1,4 +1,3 @@
-from datetime import datetime
 import sys
 
 from .app import app
@@ -36,7 +35,7 @@ class AuditStamp:
                 "row": self.row,
                 "foreign_record_id": foreign_record_id
             }
-            proc_record = Process(**staged_proc_record)
+            proc_record = Process(**staged_proc_record)  # type: ignore
             db.session.add(proc_record)
             db.session.commit()
 
@@ -61,7 +60,7 @@ class Auditor:
             "batch_action": self.action,
             "batch_status": "STARTING"
         }
-        batch_record = Batch(**staged_batch_record)
+        batch_record = Batch(**staged_batch_record)  # type: ignore
         db.session.add(batch_record)
         db.session.commit()
 

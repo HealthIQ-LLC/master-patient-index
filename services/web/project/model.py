@@ -9,7 +9,7 @@ db = SQLAlchemy(app)
 def key_gen(user: str, version: str) -> int:
     """
     :param user: the username issuing the command
-    :param version: the EMPI software version employed at the time
+    :param version: the software version employed at the time
     :return etl_id: the unique ID created for this job
     """
     with app.app_context():
@@ -18,7 +18,7 @@ def key_gen(user: str, version: str) -> int:
             "user": user,
             "version": version
         }
-        etl_id_source_record = ETLIDSource(**staged_key_record)
+        etl_id_source_record = ETLIDSource(**staged_key_record)  # type: ignore
         db.session.add(etl_id_source_record)
         db.session.commit()
         db.session.refresh(etl_id_source_record)
@@ -223,6 +223,7 @@ class EnterpriseMatch(db.Model, SerializerMixin):
     transaction_key = db.Column(db.Text, index=True)
     touched_by = db.Column(db.Text)
     touched_ts = db.Column(db.DateTime)
+
 
 # Data-model dependencies are shipped with this map
 MODEL_MAP = {

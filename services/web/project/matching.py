@@ -38,11 +38,11 @@ def compare_strings_equal(a: str, b: str) -> bool:
     return a == b
 
 
-def compare_nameday_equal(a, b) -> bool: # use this for your own datetime tests
+def compare_nameday_equal(a, b) -> bool:  # use this for your own datetime tests
     return a == b
 
 
-def compare_ssn_equal(a, b) -> bool: # use this to implement your own security
+def compare_ssn_equal(a, b) -> bool:  # use this to implement your own security
     return a == b
 
 
@@ -64,7 +64,7 @@ def slice_string_check(a: str, b: str, slice_min=3) -> (bool, int):
         if slice_result:
             return slice_result, round(slice_weight, 1)
         slice_weight -= 1 / slice_max
-    return slice_result, 0
+    return False, 0
 
 
 def alpha_composite_name_check(a: str, b: str) -> (bool, str, str):
@@ -188,17 +188,21 @@ def postal_check(a: str, b: str) -> (bool, dict):
 
 def wrap_address_check(record_a: dict, record_b: dict) -> dict:
     """
-    :record_a: one record series to be compared
-    :record_b: one record series to be compared
+    :param record_a: one record series to be compared
+    :param record_b: one record series to be compared
     """
-    metrics = {}
-    
     postal_result, postal_metrics = postal_check(
-        record_a.get("postal_code", None), record_b.get("postal_code", None))
+        record_a.get("postal_code", None),
+        record_b.get("postal_code", None)
+    )
     address_1_result, address_1_metrics = address_check(
-        record_a.get("address_1", None), record_b.get("address_1", None))
+        record_a.get("address_1", None),
+        record_b.get("address_1", None)
+    )
     address_2_result, address_2_metrics = address_check(
-        record_a.get("address_2", None), record_b.get("address_2", None))
+        record_a.get("address_2", None),
+        record_b.get("address_2", None)
+    )
 
     return {
         "address_1": address_1_result,
@@ -214,15 +218,21 @@ def wrap_address_check(record_a: dict, record_b: dict) -> dict:
 
 def wrap_name_check(record_a: dict, record_b: dict) -> dict:
     """
-    :record_a: one record series to be compared
-    :record_b: one record series to be compared
+    :param record_a: one record series to be compared
+    :param record_b: one record series to be compared
     """
     fam_name_result, fam_name_metrics = family_name_check(
-        record_a.get("family_name", None), record_b.get("family_name", None))
+        record_a.get("family_name", None),
+        record_b.get("family_name", None)
+    )
     given_name_result, given_name_metrics = given_name_check(
-        record_a.get("given_name", None), record_b.get("given_name", None))
+        record_a.get("given_name", None),
+        record_b.get("given_name", None)
+    )
     mid_name_result, mid_name_metrics = middle_name_check(
-        record_a.get("middle_name", None), record_b.get("middle_name", None))
+        record_a.get("middle_name", None),
+        record_b.get("middle_name", None)
+    )
     
     return {
         "family_name": fam_name_result,

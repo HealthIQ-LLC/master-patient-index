@@ -21,14 +21,16 @@ def timeit(func):
         start = time()
         result = func(*args, **kwargs)
         end = time()
-        print(f"{func.__name__} executed in {end - start:.4f} seconds", 
-            file=DEBUG_ROUTE)
+        print(
+            f"{func.__name__} executed in {end - start:.4f} seconds",
+            file=DEBUG_ROUTE
+        )
         return result
 
     return wrapper
 
 
-def make_logger(name:str):
+def make_logger(name: str):
     services_logger = setup_logger(__name__, F"{name}.log")
 
     return services_logger

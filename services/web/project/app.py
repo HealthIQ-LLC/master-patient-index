@@ -9,5 +9,6 @@ class Config(object):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     STATIC_FOLDER = f"{os.getenv('APP_FOLDER')}/project/static"
 
+
 app = Flask(__name__)
 app.config.from_object(Config)

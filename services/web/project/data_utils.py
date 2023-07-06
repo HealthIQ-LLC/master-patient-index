@@ -48,9 +48,9 @@ def apply_hash(record: dict, hash_keys: list):
     return my_hash
 
 
-def apply_record_metadata(record, user, create=True):
+def apply_record_metadata(record, user):
+    composite_ndpc = None
     ts = datetime.datetime.now()
-    my_hash = composite_key = composite_name = composite_ndpc = None
     my_hash = apply_hash(record, HASH_KEYS)
     composite_key = key_composite(
         record.get("organization_key") or "",
@@ -59,11 +59,15 @@ def apply_record_metadata(record, user, create=True):
     )
     composite_name = (record["given_name"])
     if record["given_name"] and record["family_name"]:
-        composite_name = create_composite_name(record["given_name"],
-                                                  record["family_name"])
+        composite_name = create_composite_name(
+            record["given_name"],
+            record["family_name"]
+        )
     if record["postal_code"]:
-        composite_ndpc = create_composite_name_day_postal_code(record["name_day"],
-                                                                  record["postal_code"])
+        composite_ndpc = create_composite_name_day_postal_code(
+            record["name_day"],
+            record["postal_code"]
+        )
     record["uq_hash"] = my_hash
     record["composite_key"] = composite_key
     record["composite_name"] = composite_name
@@ -112,7 +116,7 @@ def demographics_record(key: str) -> dict:
     given_name = unique_text_key(key)
     middle_name = unique_text_key(key)
     family_name = unique_text_key(key)
-    gender = choose("mfu")
+    gender = choose("mfu")    # type: ignore
     name_day = random_datetime()
     address_1 = unique_text_key(key)
     address_2 = unique_text_key(key)

@@ -1,8 +1,6 @@
 from datetime import datetime
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
-import sys
-from time import sleep
 
 from .app import app
 from .data_utils import apply_record_metadata
@@ -68,7 +66,7 @@ def transact_records(record, table: str) -> int:
 def query_records(payload: dict, endpoint="demographic") -> list:
     """
     :param payload: a list of key/value constraints to use in filtering
-    :param table: a string mapped to the sqla data model of tables
+    :param endpoint: a string mapped to the sqla data model of tables
     :return response: a list of rows responsive to a GET request
     The selection of every GET request is accessed here by design
     """
@@ -77,7 +75,7 @@ def query_records(payload: dict, endpoint="demographic") -> list:
     query = source_table.query
     try:
         del payload['user']
-    except:
+    except KeyError:
         pass
     for field_name, field_val in payload.items():
         query = query.\
@@ -142,10 +140,10 @@ def demographic(payload: dict, auditor) -> dict:
     for record in payload.get('demographics'):
         foreign_record_id = record.get("foreign_record_id")
         transaction_key, proc_id, batch_id, user, _ = mint_transaction_key(
-        	auditor,
-        	row=row,
-        	foreign_record_id=foreign_record_id
-        	)
+            auditor,
+            row=row,
+            foreign_record_id=foreign_record_id
+        )
         name_day_input = record.get('name_day', None)
         if type(name_day_input) is str:
             name_day_format = '%Y%m%d'
@@ -153,6 +151,8 @@ def demographic(payload: dict, auditor) -> dict:
                 strptime(name_day_input, name_day_format)
         elif type(name_day_input) is datetime:
             name_day_datetime = name_day_input
+        else:
+            name_day_datetime = None
         try:
             staged_record = {
                 "record_id": key_gen(user, version),
@@ -185,7 +185,7 @@ def demographic(payload: dict, auditor) -> dict:
             record_id = None
             with app.app_context():
                 try:
-                    demographics_record = Demographic(**record)
+                    demographics_record = Demographic(**record)  # type: ignore
                     record_id = transact_records(
                         demographics_record, 
                         "demographic"
@@ -284,7 +284,7 @@ def activate_demographic(payload: dict, auditor) -> int:
             "record_id": record_id,
             "transaction_key": transaction_key,
         }
-        demo_act_record = DemographicActivation(**staged_demo_activate_record)
+        demo_act_record = DemographicActivation(**staged_demo_activate_record)  # type: ignore
         transact_records(demo_act_record, "activations")
 
     return graph.enterprise_id
@@ -309,7 +309,7 @@ def archive_demographic(record_id: int, auditor) -> int:
         record_to_archive.touched_ts = touched_ts
         record_to_archive = record_to_archive.__dict__
         del record_to_archive['_sa_instance_state']
-        archive_record = DemographicArchive(**record_to_archive)
+        archive_record = DemographicArchive(**record_to_archive)  # type: ignore
         archive_id = transact_records(archive_record, "archive_demographic")
         db.session.query(Process). \
             filter(
@@ -370,14 +370,14 @@ def deactivate_demographic(payload: dict, auditor) -> int:
             synchronize_session=False
         )
         db.session.commit()
-        #ToDo: update in case where rm is the enterprise id item
-        #results = EnterpriseGroup.query.filter_by(enterprise_id=record_id).all()
+        # ToDo: update in case where rm is the enterprise id item
+        # results = EnterpriseGroup.query.filter_by(enterprise_id=record_id).all()
         EnterpriseGroup.query.filter_by(record_id=record_id).delete()
         EnterpriseGroup.query.filter_by(enterprise_id=record_id).delete()
         db.session.commit()
         for matched_record in recursor.matched_records:
             print(matched_record, file=DEBUG_ROUTE)
-            #if matched_record != record_id:
+            # if matched_record != record_id:
             inner_recursor = GraphReCursor(matched_record)
             print(
                 f'deac nodes and weights 2 {inner_recursor.nodes_and_weights}', 
@@ -407,7 +407,7 @@ def deactivate_demographic(payload: dict, auditor) -> int:
             "record_id": record_id,
             "transaction_key": transaction_key,
         }
-        demo_deac_record = DemographicDeactivation(**staged_demo_deac_record)
+        demo_deac_record = DemographicDeactivation(**staged_demo_deac_record)  # type: ignore
 
     return transact_records(demo_deac_record, "deactivations")
 
@@ -443,7 +443,7 @@ def delete_demographic(payload: dict, auditor) -> int:
             "record_id": record_id,
             "transaction_key": transaction_key,
         }
-        demo_delete_record = DemographicDelete(**staged_demo_delete_record)
+        demo_delete_record = DemographicDelete(**staged_demo_delete_record)  # type: ignore
 
     return transact_records(demo_delete_record, "demo_deletes")
 
@@ -476,7 +476,6 @@ def delete_action(payload: dict, auditor) -> int:
             demo_payload['demographics'] = [demographic_record]
             demographic(demo_payload, auditor)
             DemographicArchive.query.filter_by(record_id=record_id).delete()
-            active_payload = {'record_id': record_id}
             db.session.query(Process). \
                 filter(
                     Process.batch_id == batch_id, 
@@ -540,7 +539,7 @@ def delete_action(payload: dict, auditor) -> int:
             "archive_batch_id": payload_batch_id,
             "transaction_key": transaction_key,
         }
-        delete_action_record = Delete(**staged_record)
+        delete_action_record = Delete(**staged_record)  # type: ignore
 
     return transact_records(delete_action_record, "delete")
 
@@ -616,7 +615,7 @@ def affirm_matching(payload: dict, auditor) -> int:
             "record_id_high": record_id_high,
             "transaction_key": transaction_key,
         }
-        affirmation_record = MatchAffirmation(**staged_record)
+        affirmation_record = MatchAffirmation(**staged_record)  # type: ignore
 
     return transact_records(affirmation_record, "affirm")
 
@@ -699,9 +698,10 @@ def deny_matching(payload: dict, auditor) -> int:
             "record_id_high": record_id_high,
             "transaction_key": transaction_key,
         }
-        denial_record = MatchDenial(**staged_record)
+        denial_record = MatchDenial(**staged_record)  # type: ignore
 
     return transact_records(denial_record, "deny")
+
 
 # processor-dependencies are shipped with this map
 PROCESSOR_MAP = {

@@ -1,12 +1,12 @@
 from flask import jsonify, request, send_from_directory
-import sys
 import threading
+from werkzeug.exceptions import BadRequest
 
 from .app import app
 from .auditor import Auditor
-from .coupler import COUPLER, DemographicsGetValidator
+from .coupler import COUPLER
 from .logger import DEBUG_ROUTE, timeit, version
-from .validator import DemographicsGetValidator
+from .validators import DemographicsGetValidator
 
 
 @app.route("/static/<path:filename>")
@@ -26,7 +26,7 @@ def get(payload: dict, endpoint: str) -> list:
     """
     :param payload: the user-initiated data payload to GET with
     :param endpoint: a string denoting the endpoint invoked
-    Return a list of records SELECTed from the data model
+    Return a list of records selected from the data model
     """
     response = COUPLER['query_records']['processor'](payload, endpoint=endpoint)
     
@@ -42,8 +42,10 @@ def post(payload: dict, endpoint: str) -> dict:
     user = payload['user']
     processor = COUPLER[endpoint]['processor']
     with Auditor(user, version, endpoint) as job_auditor:
-        thread = threading.Thread(target=processor, 
-            args=(payload, job_auditor))
+        thread = threading.Thread(
+            target=processor,
+            args=(payload, job_auditor)
+        )
         thread.start()
     try:
         batch_key = job_auditor.batch_id
@@ -74,8 +76,8 @@ def process_payload():
     # next, deserialize the JSON request
     try:
         payload_obj = request.get_json()
-    except:
-        print("Request is not acceptable JSON", file=DEBUG_ROUTE)
+    except BadRequest as e:
+        print(f"Request is not acceptable JSON: {e}", file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
     # next, validate the request payload against its endpoint
     result, msg = validator.validate(payload_obj)
@@ -91,16 +93,18 @@ def process_payload():
     if response is not None:
         return jsonify(status=200, response=response)
     else:
-        print(f"Issue encountered with {method} request", 
-            file=DEBUG_ROUTE)
+        print(
+            f"Issue encountered with {method} request",
+            file=DEBUG_ROUTE
+        )
         return jsonify(status=405, response=response)
 
 
 # register all API endpoints on service start
-for endpoint, couplings in COUPLER.items():
+for end_point, couplings in COUPLER.items():
     app.add_url_rule(
-        f'/api_{version}/{endpoint}',
-        endpoint=endpoint, 
+        f'/api_{version}/{end_point}',
+        endpoint=end_point,
         view_func=process_payload,
         methods=couplings['methods']
     )

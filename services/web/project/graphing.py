@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from sqlalchemy import or_
 from sqlalchemy.dialects.postgresql import insert
-import sys
 
 from .app import app
 from .logger import DEBUG_ROUTE, SYSTEM_USER, version
@@ -58,8 +57,8 @@ class GraphReCursor:
                     query = db.session.query(EnterpriseMatch).\
                         filter(
                             or_(
-                            EnterpriseMatch.record_id_low == record_id,
-                            EnterpriseMatch.record_id_high == record_id
+                                EnterpriseMatch.record_id_low == record_id,
+                                EnterpriseMatch.record_id_high == record_id
                             )
                         )
                     # filter(
@@ -95,7 +94,7 @@ class GraphReCursor:
 class GraphCursor:
     """
     The GraphCursor takes `nodes_and_weights`, a list of tups of 
-    (a: int, b: int, weight: float) and batch_id, proc_id for a request
+    (a: int, b: int, weight: float) and batch_id, proc_id for a request,
     and it will transact/impose changes on the patient network when called.
     """
     def __init__(
@@ -130,7 +129,7 @@ class GraphCursor:
         self.match_count = 0
         self.new_matches = list()
         self.new_groups = list()
-        for weight in self.edge_labels.values():
+        for weight in self.edge_labels.values():  # type: ignore
             if weight >= self.config.get("match_threshold"):
                 self.match_count += 1
 
@@ -144,10 +143,14 @@ class GraphCursor:
         width = self.config.get("width")
         alpha = self.config.get("alpha")
         font_size = self.config.get("font_size")
-        elarge = [(u, v) for (u, v, d) in graph.\
-            edges(data=True) if d["weight"] >= match_threshold]
-        esmall = [(u, v) for (u, v, d) in graph.\
-            edges(data=True) if d["weight"] < match_threshold]
+        elarge = [
+            (u, v) for (u, v, d) in graph.
+            edges(data=True) if d["weight"] >= match_threshold
+        ]
+        esmall = [
+            (u, v) for (u, v, d) in graph.
+            edges(data=True) if d["weight"] < match_threshold
+        ]
         pos = nx.spring_layout(
             graph, 
             seed=self.config.get("seed")
@@ -161,7 +164,7 @@ class GraphCursor:
             graph, 
             pos, 
             edgelist=elarge, 
-        	width=width, 
+            width=width,
             edge_color="g"
         )
         nx.draw_networkx_edges(
@@ -169,7 +172,7 @@ class GraphCursor:
             pos, 
             edgelist=esmall, 
             width=width, 
-        	alpha=alpha, 
+            alpha=alpha,
             edge_color="r", 
             style="dashed"
         )
@@ -177,7 +180,7 @@ class GraphCursor:
             graph, 
             pos, 
             font_size=font_size, 
-        	font_family="sans-serif"
+            font_family="sans-serif"
         )
         edge_labels = nx.get_edge_attributes(graph, "weight")
         nx.draw_networkx_edge_labels(graph, pos, edge_labels)
@@ -191,11 +194,12 @@ class GraphCursor:
 
     def arrange_enterprise_graph(self):
         """
-        This loads the nodes-weights dialect into an nx.Graph
+        This loads the nodes-weights dialect into a nx.Graph
         and sets the enterprise ID off the lowest ID in the graph
         """
         graph = nx.Graph()
         temp_id = None
+        lower = None
         for a, b, weight in self.nodes_and_weights:
             if a != b:
                 graph.add_edge(a, b, weight=weight)
@@ -318,9 +322,9 @@ class GraphCursor:
                         values(**staged_group_record).\
                         on_conflict_do_update(
                             index_elements=[EnterpriseGroup.record_id], 
-                            where=(
-                                EnterpriseGroup.\
-                                enterprise_id != self.enterprise_id),
+                            where=(  # type: ignore
+                                EnterpriseGroup.enterprise_id != self.enterprise_id
+                            ),
                             set_=dict(
                                 transaction_key=transaction_key, 
                                 touched_ts=ts, 
@@ -354,5 +358,5 @@ class GraphCursor:
     def __str__(self):
         return f"<GraphCursor: {self.enterprise_id} | " \
                f"{len(self.graph.nodes)} records | " \
-               f"{len(self.graph.edges)} edges | "
+               f"{len(self.graph.edges)} edges | " \
                f"{self.match_count} matches>"

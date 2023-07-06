@@ -1,8 +1,7 @@
-from .model import db, MODEL_MAP
+from .model import MODEL_MAP
 from .processor import PROCESSOR_MAP
-from .validator import (
+from .validators import (
     DeleteActionValidator,
-    DemographicsGetValidator,
     DemographicsPostValidator,
     MatchValidator,
     RecordIDValidator

@@ -1,7 +1,7 @@
 import boto3
 from cryptography.fernet import Fernet
 
-from .logging import DEBUG_ROUTE, version
+from .logger import DEBUG_ROUTE, version
 
 NAME = ''
 KEY_NAME = f'empi_{version}.key'
@@ -115,7 +115,7 @@ class EMPIFileCrypt:
         try:
             self.s3_resource.Object(self.s3_bucket, file_name).load()
             exists = True
-        except:
+        except:  # ToDo: identify s3 error-scape
             exists = False
 
         return exists
@@ -136,7 +136,7 @@ class EMPIFileCrypt:
                         Bucket=self.s3_bucket, 
                         Key=self.file_name
                     )
-                except:
+                except:  # ToDo: identify error-scape
                     error_msg = f"Error cleaning up {self.file_name}"
                     print(error_msg, file=DEBUG_ROUTE)
 
@@ -151,7 +151,7 @@ class EMPIFileCrypt:
         if self.check_file(self.encrypted_file_name):
             try:
                 decrypt = self.access_encrypted_file()
-            except:
+            except:  # ToDo: identify error-scape
                 error_msg = f"Decrypt error with {self.encrypted_file_name}"
                 print(error_msg, file=DEBUG_ROUTE)
 
@@ -164,9 +164,9 @@ def empi_file_bury(file_name, read_out=False):
     :param read_out: set to True to get out with a file decrypt for analytics
     """
     with EMPIFileCrypt(file_name) as empi_file:
-        response = empi_file.encrypted_file_name
+        response = empi_file.encrypted_file_name  # type: ignore
         if read_out:
-            response = empi_file.decrypt()
+            response = empi_file.decrypt()  # type: ignore
 
     return response
 
@@ -179,6 +179,6 @@ def empi_file_disinter(encrypted_file_name):
     decrypt = None
     if file_name != encrypted_file_name:
         with EMPIFileCrypt(file_name, False) as empi_file:
-            decrypt = empi_file.decrypt()
+            decrypt = empi_file.decrypt()  # type: ignore
 
     return decrypt
