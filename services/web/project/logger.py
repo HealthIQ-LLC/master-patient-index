@@ -1,7 +1,31 @@
+from functools import wraps
 import logging
-
+from time import time
+import sys
 from .__version__ import version
+
 version = version.replace(".", "")
+DEBUG_ROUTE = sys.stderr
+SYSTEM_USER = "empi_system"
+
+
+def timeit(func):
+    """
+    :param func: Decorated function
+    :return: wrapped function
+    An opinion for exec-timing service components
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start = time()
+        result = func(*args, **kwargs)
+        end = time()
+        print(f"{func.__name__} executed in {end - start:.4f} seconds", 
+            file=DEBUG_ROUTE)
+        return result
+
+    return wrapper
 
 
 def make_logger(name:str):

@@ -6,8 +6,7 @@ from sqlalchemy.dialects.postgresql import insert
 import sys
 
 from .app import app
-from .data_utils import SYSTEM_USER
-from .logger import version
+from .logger import DEBUG_ROUTE, SYSTEM_USER, version
 from .model import (
     db, 
     Batch, 
@@ -30,7 +29,7 @@ AX_MARGINS = 0.08
 class GraphReCursor:
     """
     Select a graph, recursively, via any provided record id, get the nodes and 
-    weights in the dialect for init of GraphCursors.
+    weights in the dialect for use by GraphCursors.
     """
     def __init__(self, record_id):
         self.record_id = record_id
@@ -43,14 +42,19 @@ class GraphReCursor:
         self.recursive_match_graphing()
 
     def recursive_match_graphing(self):
+        """
+        This will collect all records that are graphed together.
+        Using a starter of one record it will proceed at adding
+        records to itself until it can no longer find records to add.
+        """
         with app.app_context():
             response = list()
             matched_records = self.matched_records
-            print(f'{matched_records} recursive 1', file=sys.stderr)
+            print(f'{matched_records} recursive 1', file=DEBUG_ROUTE)
             graph_size = self.graph_size
             for record_id in matched_records:
                 if record_id not in self.already_matched:
-                    print(f'{record_id} recursive 2', file=sys.stderr)
+                    print(f'{record_id} recursive 2', file=DEBUG_ROUTE)
                     query = db.session.query(EnterpriseMatch).\
                         filter(
                             or_(
@@ -61,7 +65,7 @@ class GraphReCursor:
                     # filter(
                     # EnterpriseMatch.is_valid is True).\
                     for row in query.all():
-                        print(f"recursive match record found {row}", file=sys.stderr)
+                        print(f"recursive match record found {row}", file=DEBUG_ROUTE)
                         a = row.record_id_low
                         b = row.record_id_high
                         weight = row.match_weight
@@ -71,7 +75,7 @@ class GraphReCursor:
                             response.append(b)
                     self.already_matched.append(record_id)
             response_set = set(response)
-            print(f"response set found {response_set}", file=sys.stderr)
+            print(f"response set found {response_set}", file=DEBUG_ROUTE)
             for item in response_set:
                 matched_records.add(item)
             new_graph_size = len(matched_records)
@@ -91,7 +95,8 @@ class GraphReCursor:
 class GraphCursor:
     """
     The GraphCursor takes `nodes_and_weights`, a list of tups of 
-    (a: int, b: int, weight: float) and batch_id, proc_id
+    (a: int, b: int, weight: float) and batch_id, proc_id for a request
+    and it will transact/impose changes on the patient network when called.
     """
     def __init__(
             self,
@@ -130,22 +135,50 @@ class GraphCursor:
                 self.match_count += 1
 
     def plot_enterprise_graph(self):
+        """
+        This creates a plt object using the graph object
+        """
         graph = self.graph
         match_threshold = self.config.get("match_threshold")
         node_size = self.config.get("node_size")
         width = self.config.get("width")
         alpha = self.config.get("alpha")
         font_size = self.config.get("font_size")
-        elarge = [(u, v) for (u, v, d) in graph.edges(data=True) if d["weight"] >= match_threshold]
-        esmall = [(u, v) for (u, v, d) in graph.edges(data=True) if d["weight"] < match_threshold]
-        pos = nx.spring_layout(graph, seed=self.config.get("seed"))
-        nx.draw_networkx_nodes(graph, pos, node_size=node_size)
-        nx.draw_networkx_edges(graph, pos, edgelist=elarge, 
-        	width=width, edge_color="g")
-        nx.draw_networkx_edges(graph, pos, edgelist=esmall, width=width, 
-        	alpha=alpha, edge_color="r", style="dashed")
-        nx.draw_networkx_labels(graph, pos, font_size=font_size, 
-        	font_family="sans-serif")
+        elarge = [(u, v) for (u, v, d) in graph.\
+            edges(data=True) if d["weight"] >= match_threshold]
+        esmall = [(u, v) for (u, v, d) in graph.\
+            edges(data=True) if d["weight"] < match_threshold]
+        pos = nx.spring_layout(
+            graph, 
+            seed=self.config.get("seed")
+        )
+        nx.draw_networkx_nodes(
+            graph, 
+            pos, 
+            node_size=node_size
+        )
+        nx.draw_networkx_edges(
+            graph, 
+            pos, 
+            edgelist=elarge, 
+        	width=width, 
+            edge_color="g"
+        )
+        nx.draw_networkx_edges(
+            graph, 
+            pos, 
+            edgelist=esmall, 
+            width=width, 
+        	alpha=alpha, 
+            edge_color="r", 
+            style="dashed"
+        )
+        nx.draw_networkx_labels(
+            graph, 
+            pos, 
+            font_size=font_size, 
+        	font_family="sans-serif"
+        )
         edge_labels = nx.get_edge_attributes(graph, "weight")
         nx.draw_networkx_edge_labels(graph, pos, edge_labels)
         ax = plt.gca()
@@ -157,6 +190,10 @@ class GraphCursor:
         return plt
 
     def arrange_enterprise_graph(self):
+        """
+        This loads the nodes-weights dialect into an nx.Graph
+        and sets the enterprise ID off the lowest ID in the graph
+        """
         graph = nx.Graph()
         temp_id = None
         for a, b, weight in self.nodes_and_weights:
@@ -179,6 +216,13 @@ class GraphCursor:
         return enterprise_id, graph
 
     def __call__(self):
+        """
+        When a demographic is activated or deactivated, when a match is 
+        affirmed or denied, or when one of these activities is reversed,
+        there may be changes to one or more graphs in the patient network.
+        The Match and Group tables are updated on so that they reflect
+        the contents of the GraphCursor object.
+        """
         with app.app_context():
             user = SYSTEM_USER
             transaction_key = f"{self.batch_id}_{self.proc_id}"
@@ -191,15 +235,16 @@ class GraphCursor:
                 else:
                     low = b
                     high = a
+                # Address Match records
                 if weight >= threshold:
                     results = db.session.query(EnterpriseMatch).\
-                    filter(
-                        EnterpriseMatch.record_id_low == low,
-                        EnterpriseMatch.record_id_high == high
+                        filter(
+                            EnterpriseMatch.record_id_low == low,
+                            EnterpriseMatch.record_id_high == high
                         ).first()
                     if results is None:
                         etl_id = key_gen(user, version)
-                        print(f'ETL id {etl_id}', file=sys.stderr)
+                        print(f'ETL id {etl_id}', file=DEBUG_ROUTE)
                         staged_match_record = {
                             "etl_id": etl_id,
                             "record_id_low": low,
@@ -210,24 +255,33 @@ class GraphCursor:
                             "touched_by": user,
                             "touched_ts": ts
                         }
-                        statement = insert(EnterpriseMatch).values(**staged_match_record).on_conflict_do_nothing()
+                        statement = insert(EnterpriseMatch).\
+                            values(**staged_match_record).\
+                            on_conflict_do_nothing()
                         db.session.execute(statement)
                         db.session.commit()
                     else:
                         etl_id = results.etl_id
                     self.new_matches.append(etl_id)
                 elif weight < threshold:
-                    db.session.query(EnterpriseMatch).filter(EnterpriseMatch.record_id_low == low,
-                        EnterpriseMatch.record_id_high == high).\
-                        update({EnterpriseMatch.is_valid: False}, synchronize_session=False)
+                    db.session.query(EnterpriseMatch).\
+                        filter(
+                            EnterpriseMatch.record_id_low == low,
+                            EnterpriseMatch.record_id_high == high
+                        ).\
+                        update(
+                            {EnterpriseMatch.is_valid: False}, 
+                            synchronize_session=False
+                        )
                     db.session.commit()
             group_list = list()
-            print(self.new_matches, file=sys.stderr)
+            print(self.new_matches, file=DEBUG_ROUTE)
             for etl_id in self.new_matches:
-                print(f'etl id {etl_id}', file=sys.stderr)
+                print(f'etl id {etl_id}', file=DEBUG_ROUTE)
                 response = []
-                query = db.session.query(EnterpriseMatch).filter(
-                    EnterpriseMatch.etl_id == etl_id
+                query = db.session.query(EnterpriseMatch).\
+                    filter(
+                        EnterpriseMatch.etl_id == etl_id
                     )
                 for row in query.all():
                     response.append(row.to_dict())
@@ -235,16 +289,21 @@ class GraphCursor:
                 group_list.append(record_high)
                 record_low = response[0].get("record_id_low")
                 group_list.append(record_low)
+            # Address Group records
             group_set = set(group_list)
-            #ToDo: confirm not deacc by transaction key
-            response = db.session.query(Process).filter(
-                Process.transaction_key == transaction_key
+            # ToDo: confirm not deacc by transaction key
+            response = db.session.query(Process).\
+                filter(
+                    Process.transaction_key == transaction_key
                 ).first()
             batch_key = response.batch_id
             response = db.session.query(Batch).filter(
                 Batch.batch_id == batch_key).first()
             batch_action = response.batch_action
-            if batch_action not in ['deactivate_demographic', 'delete_demographic']:
+            if batch_action not in [
+                'deactivate_demographic', 
+                'delete_demographic'
+            ]:
                 for record_id in group_set:
                     etl_id = key_gen(user, version)
                     staged_group_record = {
@@ -255,15 +314,25 @@ class GraphCursor:
                         "touched_by": user,
                         "touched_ts": ts
                     }
-                    statement = insert(EnterpriseGroup).values(**staged_group_record).on_conflict_do_update(
-                        index_elements=[EnterpriseGroup.record_id], where=(EnterpriseGroup.enterprise_id != self.enterprise_id),
-                        set_=dict(transaction_key=transaction_key, touched_ts=ts, enterprise_id=self.enterprise_id),
-                    )
+                    statement = insert(EnterpriseGroup).\
+                        values(**staged_group_record).\
+                        on_conflict_do_update(
+                            index_elements=[EnterpriseGroup.record_id], 
+                            where=(
+                                EnterpriseGroup.\
+                                enterprise_id != self.enterprise_id),
+                            set_=dict(
+                                transaction_key=transaction_key, 
+                                touched_ts=ts, 
+                                enterprise_id=self.enterprise_id
+                            ),
+                        )
                     db.session.execute(statement)
                     db.session.commit()
-                    result = db.session.query(EnterpriseGroup).filter(EnterpriseGroup.touched_ts == ts).all()
-                    # store bulletin record if necessary
-                    if len(result) > 0:  # this activity upserted a group record, so we issue the bulletin
+                    result = db.session.query(EnterpriseGroup).\
+                        filter(EnterpriseGroup.touched_ts == ts).all()
+                    # create bulletin record if necessary
+                    if len(result) > 0:
                         staged_graph_bulletin_record = {
                             "etl_id": key_gen(user, version),
                             "batch_id": self.batch_id,
@@ -273,7 +342,8 @@ class GraphCursor:
                             "transaction_key": transaction_key,
                             "bulletin_ts": ts
                         }
-                        statement = insert(Bulletin).values(**staged_graph_bulletin_record)
+                        statement = insert(Bulletin).\
+                            values(**staged_graph_bulletin_record)
                         db.session.execute(statement)
                         db.session.commit()
                         self.new_groups.append(etl_id)  
@@ -282,5 +352,7 @@ class GraphCursor:
         self.plot.savefig(f"{self.enterprise_id}.png")
 
     def __str__(self):
-        return f"<GraphCursor: {self.enterprise_id} | {len(self.graph.nodes)} records | " \
-               f"{len(self.graph.edges)} edges | {self.match_count} matches>"
+        return f"<GraphCursor: {self.enterprise_id} | " \
+               f"{len(self.graph.nodes)} records | " \
+               f"{len(self.graph.edges)} edges | "
+               f"{self.match_count} matches>"

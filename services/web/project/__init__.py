@@ -1,38 +1,19 @@
-from flask import Flask, jsonify, request, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from functools import wraps
+from flask import jsonify, request, send_from_directory
 import sys
 import threading
-from time import time
 
 from .app import app
 from .auditor import Auditor
-from .coupler import COUPLER, DemographicsGetValidator, db
-from .logger import mylogger, version
-
-DEBUG_ROUTE = sys.stderr
-
-
-def timeit(func):
-    """
-    :param func: Decorated function
-    :return: Execution time for the decorated function
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start = time()
-        result = func(*args, **kwargs)
-        end = time()
-        print(f"{func.__name__} executed in {end - start:.4f} seconds", 
-            file=DEBUG_ROUTE)
-        return result
-
-    return wrapper
+from .coupler import COUPLER, DemographicsGetValidator
+from .logger import DEBUG_ROUTE, timeit, version
+from .validator import DemographicsGetValidator
 
 
 @app.route("/static/<path:filename>")
 def staticfiles(filename):
+    """
+    :param filename: The path to a file to download
+    """
     return send_from_directory(app.config["STATIC_FOLDER"], filename)
 
 
@@ -41,10 +22,11 @@ def hello_world():
     return jsonify(hello="world")
 
 
-def get(payload: dict, endpoint: str) -> dict:
+def get(payload: dict, endpoint: str) -> list:
     """
     :param payload: the user-initiated data payload to GET with
     :param endpoint: a string denoting the endpoint invoked
+    Return a list of records SELECTed from the data model
     """
     response = COUPLER['query_records']['processor'](payload, endpoint=endpoint)
     
@@ -55,6 +37,7 @@ def post(payload: dict, endpoint: str) -> dict:
     """
     :param payload: the user-initiated data payload to POST with
     :param endpoint: a string denoting the endpoint invoked
+    The auditor provides context management and threading for a POST request
     """
     user = payload['user']
     processor = COUPLER[endpoint]['processor']
@@ -78,18 +61,25 @@ def post(payload: dict, endpoint: str) -> dict:
 
 @timeit
 def process_payload():
+    """
+    A wrapper for all requests: payload is deserialized, validated, and routed
+    """
     response = None
     endpoint = request.endpoint
     method = request.method
+    # first, retrieve the appropriate validator for the endpoint
     validator = COUPLER[endpoint]['validator']()
     if endpoint == 'demographic' and method == 'GET':
         validator = DemographicsGetValidator()
+    # next, deserialize the JSON request
     try:
         payload_obj = request.get_json()
     except:
         print("Request is not acceptable JSON", file=DEBUG_ROUTE)
         return jsonify(status=405, response=response)
+    # next, validate the request payload against its endpoint
     result, msg = validator.validate(payload_obj)
+    # do the request itself
     if result:
         if method == "GET":
             response = get(payload_obj, endpoint)
@@ -106,7 +96,7 @@ def process_payload():
         return jsonify(status=405, response=response)
 
 
-# register all API endpoints via the COUPLER
+# register all API endpoints on service start
 for endpoint, couplings in COUPLER.items():
     app.add_url_rule(
         f'/api_{version}/{endpoint}',

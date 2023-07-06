@@ -1,7 +1,7 @@
 from sqlalchemy import and_, or_
-import sys
 from time import time
 
+from .logger import DEBUG_ROUTE
 from .matching import (
     compare_nameday_equal, 
     compare_ssn_equal, 
@@ -12,6 +12,9 @@ from .model import Demographic
 
 
 def parse_result(metrics: dict) -> bool:
+    """
+    :param metrics: the object containing the results of pair-wise analysis
+    """
     threshold = metrics.get('threshold')
     score = metrics.get('score')
     if score >= threshold:
@@ -21,6 +24,10 @@ def parse_result(metrics: dict) -> bool:
 
 
 def toy_fine_matching(record_a, record_b) -> dict:
+    """
+    :param record_a: the new demographics record to be networked
+    :param record_b: one coarse match record 
+    """
     stride = 0.3
     match_score = 0
     threshold = 0.5
@@ -43,8 +50,8 @@ def toy_fine_matching(record_a, record_b) -> dict:
 
 def fine_matching(record_a: dict, record_b: dict) -> dict:
     """
-    :param record_a: the new demographics record 
-    :param record_b: the coarse match record against which the new record is tested
+    :param record_a: the new demographics record to be networked
+    :param record_b: one coarse match record 
     """
     start = time()
     # ToDo: score and threshold
@@ -82,7 +89,7 @@ def toy_coarse_matching(demographic_record) -> list:
         .filter(and_(source_table.__table__.c['record_id'] != record_id))
     for row in query.all():
         coarse_results.append(row)
-        print(row, file=sys.stderr)
+        print(row, file=DEBUG_ROUTE)
 
     return coarse_results
 
@@ -97,8 +104,7 @@ def coarse_matching(demographics_record) -> list:
 
     return coarse_results
 
-# implement blocking & filtering technique here with coarse, fine matching modes
-MODES = {
+MODES = {  # implement any kind of blocking / filtering by setting a mode here
     "toy": (toy_coarse_matching, toy_fine_matching),
     "prod": (coarse_matching, fine_matching)
 }
@@ -114,7 +120,9 @@ def compute_all_matches(demographic_record) -> (list, str):
     computed_matches = []
     for coarse_match in coarse_matcher(demographic_record):
         if demographic_record.record_id != coarse_match.record_id:
-            computed_matches.append(fine_matcher(demographic_record, coarse_match))
+            computed_matches.append(
+                fine_matcher(demographic_record, coarse_match)
+            )
     end = time()
     exec_time = f"{end - start:.8f}"
 

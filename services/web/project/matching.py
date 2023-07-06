@@ -38,11 +38,11 @@ def compare_strings_equal(a: str, b: str) -> bool:
     return a == b
 
 
-def compare_nameday_equal(a, b) -> bool: # use this to implement your own datetime-related tests
+def compare_nameday_equal(a, b) -> bool: # use this for your own datetime tests
     return a == b
 
 
-def compare_ssn_equal(a, b) -> bool: # use this to implement your own heightened security posture
+def compare_ssn_equal(a, b) -> bool: # use this to implement your own security
     return a == b
 
 
@@ -50,7 +50,7 @@ def slice_string_check(a: str, b: str, slice_min=3) -> (bool, int):
     """
     :param a: one string value to be compared
     :param b: one string value to be compared
-    :param slice_min: a value of 3 compare a[:3] to b[:3] at the lower end of the range
+    :param slice_min: a value of 3 compare a[:3] to b[:3] at the lower end
     """
     len_a = len(a)
     len_b = len(b)
@@ -95,9 +95,17 @@ def family_name_check(a: str, b: str) -> (bool, dict):
     alpha_composite_result, sub_a, sub_b = alpha_composite_name_check(a, b)
     if alpha_composite_result:
         metrics["sub_result"] = sub_a
-    if compare_strings_equal(*string_trimmer(*string_replacer(sub_a, sub_b, "JR", ""))):
+    if compare_strings_equal(
+        *string_trimmer(
+            *string_replacer(sub_a, sub_b, "JR", "")
+        )
+    ):
         metrics["junior_detected"] = True
-    if compare_strings_equal(*string_trimmer(*string_replacer(sub_a, sub_b, "SR", ""))):
+    if compare_strings_equal(
+        *string_trimmer(
+            *string_replacer(sub_a, sub_b, "SR", "")
+        )
+    ):
         metrics["senior_detected"] = True
 
     return result, metrics

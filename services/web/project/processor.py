@@ -9,7 +9,7 @@ from .app import app
 from .data_utils import apply_record_metadata
 from .engine import compute_all_matches
 from .graphing import GraphCursor, GraphReCursor
-from .logger import version
+from .logger import DEBUG_ROUTE, version
 from .model import (
     db,
     key_gen,
@@ -29,11 +29,12 @@ from .model import (
 )
 
 
-def mint_transaction_key(auditor, row=None, foreign_record_id=None):
+def mint_transaction_key(auditor, row=None, foreign_record_id=None) -> tuple:
     """
-    :param auditor: native Auditor class object for data warehousing
-    :param row: used when counting rows in tables
-    :param foreign_record_id: the primary key from demographic record origin
+    :param auditor: context management object for the transaction
+    :param row: used when counting rows for a Demographics POST
+    :param foreign_record_id: the source pk for a demographic record post
+    This function wraps the call to auditor.stamp()
     """
     ts = datetime.now()
     proc_id = auditor.stamp(row, foreign_record_id)
@@ -44,8 +45,10 @@ def mint_transaction_key(auditor, row=None, foreign_record_id=None):
 
 def transact_records(record, table: str) -> int:
     """
-    :param record: a sqla data object for insertion into an appropriate table
-    :param table: a string identifying a table
+    :param record: a sqla data object for insertion into a target table
+    :param table: a string identifying the target table
+    :return record_id: the primary key byproduct of the transaction
+    The effect of every POST is transacted here by design
     """
     with app.app_context():
         db.session.add(record)
@@ -67,6 +70,8 @@ def query_records(payload: dict, endpoint="demographic") -> list:
     """
     :param payload: a list of key/value constraints to use in filtering
     :param table: a string mapped to the sqla data model of tables
+    :return response: a list of rows responsive to a GET request
+    The selection of every GET request is accessed here by design
     """
     response = list()
     source_table = MODEL_MAP[endpoint]
@@ -83,27 +88,41 @@ def query_records(payload: dict, endpoint="demographic") -> list:
     return response
 
 
-def update_status(batch_id, proc_id, message):
+def update_status(batch_id: int, proc_id: int, message: str):
     """
-    This function is called to log the conclusion of each process in the Process table
+    :param batch_id: the unique locator for the API request
+    :param proc_id: the unique locator for the record-level process
+    :param message: the status to store at target record location
+    This function is called to log the conclusion of each process
     """
     with app.app_context():
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_status: message}, synchronize_session=False)
+            update(
+                {Process.proc_status: message}, 
+                synchronize_session=False
+            )
         db.session.commit()
         batch_check_query = db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_status == 'PENDING')
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_status == 'PENDING'
+            )
         if len(batch_check_query.all()) == 0:
             db.session.query(Batch).filter(Batch.batch_id == batch_id).\
-                update({Batch.batch_status: "COMPUTED"}, synchronize_session=False)
+                update(
+                    {Batch.batch_status: "COMPUTED"}, 
+                    synchronize_session=False
+                )
             db.session.commit()
 
 
 def demographic(payload: dict, auditor) -> dict:
     """
-    :param payload: a list of json/dict-like records to be computed by EMPI
+    :param payload: a list of json/dict-like records to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return metrics: the results of posting a list of demographic records
+    This processor is accessed when a list of demographics is POSTed.
     """
     metrics = {
         "affected_records": [],
@@ -127,7 +146,8 @@ def demographic(payload: dict, auditor) -> dict:
         name_day_input = record.get('name_day', None)
         if type(name_day_input) is str:
             name_day_format = '%Y%m%d'
-            name_day_datetime = datetime.strptime(name_day_input, name_day_format)
+            name_day_datetime = datetime.\
+                strptime(name_day_input, name_day_format)
         elif type(name_day_input) is datetime:
             name_day_datetime = name_day_input
         try:
@@ -143,7 +163,10 @@ def demographic(payload: dict, auditor) -> dict:
                 "name_day":  name_day_datetime,
                 "organization_key": record.get("organization_key", None),
                 "postal_code": record.get("postal_code", None),
-                "social_security_number": record.get("social_security_number", None),
+                "social_security_number": record.get(
+                    "social_security_number", 
+                    None
+                ),
                 "state": record.get("state", None),
                 "system_key": record.get("system_key", None),
                 "system_id": record.get("system_id", None),
@@ -160,19 +183,30 @@ def demographic(payload: dict, auditor) -> dict:
             with app.app_context():
                 try:
                     demographics_record = Demographic(**record)
-                    record_id = transact_records(demographics_record, "demographic")
+                    record_id = transact_records(
+                        demographics_record, 
+                        "demographic"
+                    )
                     metrics["proc_ids"].append(proc_id)
-                    metrics["affected_records"].append((batch_id, proc_id, record_id, transaction_key))
+                    metrics["affected_records"].append(
+                        (batch_id, proc_id, record_id, transaction_key)
+                    )
                     metrics["pending_count"] += 1
                 except IntegrityError:
                     db.session.rollback()
                     metrics["skipped_count"] += 1
                 except Exception as error_msg:
-                    print(error_msg, file=sys.stderr)
+                    print(error_msg, file=DEBUG_ROUTE)
                 if record_id is not None:
                     db.session.query(Process). \
-                        filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-                        update({Process.proc_record_id: record_id}, synchronize_session=False)
+                        filter(
+                            Process.batch_id == batch_id, 
+                            Process.proc_id == proc_id
+                        ).\
+                        update(
+                            {Process.proc_record_id: record_id}, 
+                            synchronize_session=False
+                        )
                     db.session.commit()
                     update_status(batch_id, proc_id, "POSTED")
                     activate_demographic({"record_id": record_id}, auditor)
@@ -183,11 +217,14 @@ def demographic(payload: dict, auditor) -> dict:
 
 def activate_demographic(payload: dict, auditor) -> int:
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return graph.enterprise_id: the graph ID for the activated record
+    This processor is accessed when a demographic is Activated
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         record_id = payload.get("record_id")
         db.session.query(Demographic).\
             filter(Demographic.record_id == record_id).\
@@ -201,7 +238,10 @@ def activate_demographic(payload: dict, auditor) -> int:
         )
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: record_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: record_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         db.session.query(EnterpriseMatch).\
             filter(EnterpriseMatch.is_valid is False,
@@ -219,7 +259,8 @@ def activate_demographic(payload: dict, auditor) -> int:
             synchronize_session=False
         )
         db.session.commit()
-        record = db.session.query(Demographic).filter(Demographic.record_id == record_id).first()
+        record = db.session.query(Demographic).\
+            filter(Demographic.record_id == record_id).first()
         computed_matches, _ = compute_all_matches(record)
         nodes_and_weights = list()
         for computed_match in computed_matches:
@@ -247,12 +288,16 @@ def archive_demographic(record_id: int, auditor):
     """
     :param record_id: the record ID of the targeted Demographic record
     :param auditor: native Auditor class object for data warehousing
+    :return archive_id: the record ID of the Archived record in the Archive table.
+    This processor is accessed when a demographic is Archived
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         record_to_archive = db.session.query(Demographic).\
             filter(Demographic.record_id == record_id).first()
-        record_to_archive.archive_transaction_key = record_to_archive.transaction_key
+        record_to_archive.archive_transaction_key = \
+            record_to_archive.transaction_key
         record_to_archive.transaction_key = transaction_key
         record_to_archive.touched_by = user
         record_to_archive.touched_ts = touched_ts
@@ -262,7 +307,10 @@ def archive_demographic(record_id: int, auditor):
         archive_id = transact_records(archive_record, "archive_demographic")
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: archive_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: archive_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         update_status(batch_id, proc_id, "ARCHIVED")
 
@@ -271,15 +319,21 @@ def archive_demographic(record_id: int, auditor):
 
 def deactivate_demographic(payload: dict, auditor):
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return transact_records(): this transacts and surfaces the transaction key
+    This processor is accessed when a demographic is Deactivated
     """
     
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         record_id = payload.get("record_id")
         recursor = GraphReCursor(record_id)
-        print(f'deac nodes and weights 1 {recursor.nodes_and_weights}', file=sys.stderr)
+        print(
+            f'deac nodes and weights 1 {recursor.nodes_and_weights}', 
+            file=DEBUG_ROUTE
+        )
         db.session.query(Demographic).\
             filter(Demographic.record_id == record_id).\
             update(
@@ -313,15 +367,25 @@ def deactivate_demographic(payload: dict, auditor):
         EnterpriseGroup.query.filter_by(enterprise_id=record_id).delete()
         db.session.commit()
         for matched_record in recursor.matched_records:
-            print(matched_record, file=sys.stderr)
+            print(matched_record, file=DEBUG_ROUTE)
             #if matched_record != record_id:
             inner_recursor = GraphReCursor(matched_record)
-            print(f'deac nodes and weights 2 {inner_recursor.nodes_and_weights}', file=sys.stderr)
-            graph = GraphCursor(inner_recursor.nodes_and_weights, batch_id, proc_id)
+            print(
+                f'deac nodes and weights 2 {inner_recursor.nodes_and_weights}', 
+                file=DEBUG_ROUTE
+            )
+            graph = GraphCursor(
+                inner_recursor.nodes_and_weights, 
+                batch_id, 
+                proc_id
+            )
             graph()
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: record_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: record_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         EnterpriseMatch.query.filter_by(is_valid=False).delete()
         db.session.commit()
@@ -338,11 +402,14 @@ def deactivate_demographic(payload: dict, auditor):
 
 def delete_demographic(payload: dict, auditor):
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return transact_records(): this transacts and surfaces the transaction key
+    This processor is accessed when a demographic is Deleted
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, _ = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, _ = \
+            mint_transaction_key(auditor)
         record_id = payload["record_id"]
         deactivate_demographic({"record_id": record_id}, auditor)
         archive_demographic(record_id, auditor)
@@ -350,7 +417,10 @@ def delete_demographic(payload: dict, auditor):
         db.session.commit()
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: record_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: record_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         update_status(batch_id, proc_id, "DELETED DEMOGRAPHIC")
         staged_demo_delete_record = {
@@ -365,19 +435,24 @@ def delete_demographic(payload: dict, auditor):
 
 def delete_action(payload: dict, auditor):
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return transact_records(): this transacts and surfaces the transaction key
+    This processor is accessed when an Action is Deleted
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         payload_batch_id = payload['batch_id']
         payload_proc_id = payload['proc_id']
         select_transaction_key = f'{payload_batch_id}_{payload_proc_id}'
         action = payload['action']
         if action == 'delete':
-            delete_record = DemographicDelete.query.filter_by(transaction_key=select_transaction_key).first()
+            delete_record = DemographicDelete.query.\
+                filter_by(transaction_key=select_transaction_key).first()
             record_id = delete_record.record_id
-            demographic_record = DemographicArchive.query.filter_by(record_id=record_id).first().__dict__
+            demographic_record = DemographicArchive.query.\
+                filter_by(record_id=record_id).first().__dict__
             del demographic_record['archive_transaction_key']
             demographic_record["transaction_key"] = transaction_key
             demographic_record["touched_by"] = user
@@ -389,21 +464,32 @@ def delete_action(payload: dict, auditor):
             active_payload = {'record_id': record_id}
             db.session.query(Process). \
                 filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-                update({Process.proc_record_id: record_id}, synchronize_session=False)
+                update(
+                    {Process.proc_record_id: record_id}, 
+                    synchronize_session=False
+                )
             db.session.commit()
         else:
             record_id_low = record_id_high = None
             if action == 'affirm':
-                affirm_record = MatchAffirmation.query.filter_by(transaction_key=select_transaction_key).first()
+                affirm_record = MatchAffirmation.query.\
+                    filter_by(transaction_key=select_transaction_key).first()
                 record_id_low = affirm_record.record_id_low
                 record_id_high = affirm_record.record_id_high
-                del_affirm_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
+                del_affirm_payload = {
+                    'record_id_low': record_id_low, 
+                    'record_id_high': record_id_high
+                }
                 deny_matching(del_affirm_payload, auditor)
             elif action == 'deny':
-                deny_record = MatchDenial.query.filter_by(transaction_key=select_transaction_key).first()
+                deny_record = MatchDenial.query.\
+                    filter_by(transaction_key=select_transaction_key).first()
                 record_id_low = deny_record.record_id_low
                 record_id_high = deny_record.record_id_high
-                del_deny_payload = {'record_id_low': record_id_low, 'record_id_high': record_id_high}
+                del_deny_payload = {
+                    'record_id_low': record_id_low, 
+                    'record_id_high': record_id_high
+                }
                 affirm_matching(del_deny_payload, auditor)
             recursor_low = GraphReCursor(record_id_low)
             recursor_high = GraphReCursor(record_id_high)
@@ -411,13 +497,21 @@ def delete_action(payload: dict, auditor):
             for matched_record in recursor_low.matched_records:
                 if matched_record not in already_matched:
                     recursor = GraphReCursor(matched_record)
-                    graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                    graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                     graph()
                     already_matched.append(matched_record)
             for matched_record in recursor_high.matched_records:
                 if matched_record not in already_matched:
                     recursor = GraphReCursor(matched_record)
-                    graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                    graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                     graph()
                     already_matched.append(matched_record)
         update_status(batch_id, proc_id, f"DELETED {action}")
@@ -435,11 +529,14 @@ def delete_action(payload: dict, auditor):
 
 def affirm_matching(payload: dict, auditor):
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return transact_records(): this transacts and surfaces the transaction key
+    This processor is accessed when a Match is Affirmed
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         record_id_low = payload.get("record_id_low")
         record_id_high = payload.get("record_id_high")
         record = db.session.query(EnterpriseMatch). \
@@ -463,7 +560,10 @@ def affirm_matching(payload: dict, auditor):
         db.session.commit()
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: etl_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: etl_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         recursor_low = GraphReCursor(record_id_low)
         recursor_high = GraphReCursor(record_id_high)
@@ -471,13 +571,21 @@ def affirm_matching(payload: dict, auditor):
         for matched_record in recursor_low.matched_records:
             if matched_record not in already_matched:
                 recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                 graph()
                 already_matched.append(matched_record)
         for matched_record in recursor_high.matched_records:
             if matched_record not in already_matched:
                 recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                 graph()
                 already_matched.append(matched_record)
         update_status(batch_id, proc_id, "AFFIRMED")
@@ -494,11 +602,14 @@ def affirm_matching(payload: dict, auditor):
 
 def deny_matching(payload: dict, auditor):
     """
-    :param payload: a dict representing a json/dict-like record to be computed by EMPI
+    :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
+    :return transact_records(): this transacts and surfaces the transaction key
+    This processor is accessed when a Match is Denied
     """
     with app.app_context():
-        transaction_key, proc_id, batch_id, user, touched_ts = mint_transaction_key(auditor)
+        transaction_key, proc_id, batch_id, user, touched_ts = \
+            mint_transaction_key(auditor)
         record_id_low = payload.get("record_id_low")
         record_id_high = payload.get("record_id_high")
         record = db.session.query(EnterpriseMatch). \
@@ -521,23 +632,34 @@ def deny_matching(payload: dict, auditor):
         db.session.commit()
         db.session.query(Process). \
             filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
-            update({Process.proc_record_id: etl_id}, synchronize_session=False)
+            update(
+                {Process.proc_record_id: etl_id}, 
+                synchronize_session=False
+            )
         db.session.commit()
         recursor_low = GraphReCursor(record_id_low)
         recursor_high = GraphReCursor(record_id_high)
         already_matched = list()
         for matched_record in recursor_low.matched_records:
             if matched_record not in already_matched:
-                print(f"{recursor.nodes_and_weights} low", file=sys.stderr)
+                print(f"{recursor.nodes_and_weights} low", file=DEBUG_ROUTE)
                 recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                 graph()
                 already_matched.append(matched_record)
         for matched_record in recursor_high.matched_records:
             if matched_record not in already_matched:
-                print(f"{recursor.nodes_and_weights} high", file=sys.stderr)
+                print(f"{recursor.nodes_and_weights} high", file=DEBUG_ROUTE)
                 recursor = GraphReCursor(matched_record)
-                graph = GraphCursor(recursor.nodes_and_weights, batch_id, proc_id)
+                graph = GraphCursor(
+                        recursor.nodes_and_weights, 
+                        batch_id, 
+                        proc_id
+                    )
                 graph()
                 already_matched.append(matched_record)
         update_status(batch_id, proc_id, "DENIED")
@@ -551,6 +673,7 @@ def deny_matching(payload: dict, auditor):
 
     return transact_records(denial_record, "deny")
 
+# processor-dependencies are shipped with this map
 PROCESSOR_MAP = {
     "delete_action": delete_action,
     "demographic": demographic,

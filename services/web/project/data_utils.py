@@ -15,7 +15,6 @@ HASH_KEYS = [
     "name_day",
     "gender",
 ]
-SYSTEM_USER = "empi_system"
 
 
 def choose(input_list: list):
@@ -103,6 +102,8 @@ def unique_text_key(key="TEST") -> str:
     return f"{key}_{uuid.uuid4().hex[:8]}"
 
 
+# these functions generate dummy test records
+# ToDo: couple test record gen to Model
 def demographics_record(key: str) -> dict:
     record_id = unique_id()
     organization_key = unique_text_key(key)
