@@ -178,10 +178,10 @@ D-->E{Payload Processor}
 E-->|GET| F(`query_records`)
 F-->G[List of records]
 E-->|POST| H[Auditor]
-H-->O(Create Batch ID\nBatch Status: PENDING)
-O-->|__enter__| I(Thread/Processor)
-I-->P(Create Process ID\nProcess Status: Pending)
-P-->|__call__|L(Computation)
+H-->O(Create Batch ID)
+O-->|__enter__\nBatch Status: PENDING| I(Thread/Processor)
+I-->P(Create Process ID)
+P-->|__call__\nProcess Status: Pending|L(Computation)
 N-->|__exit__\nProcess Status: Completed\nBatch Status: Completed\nIF all Batch:Processes are Completed|H
 I-->K(Response Packet)
 L-->M(Re-Graph)
