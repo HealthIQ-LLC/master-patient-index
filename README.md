@@ -181,10 +181,9 @@ E-->|POST| H[Auditor]
 H-->O(Create Batch ID\nBatch Status: PENDING)
 O-->|__enter__| I(Thread/Processor)
 I-->P(Create Process ID\nProcess Status: Pending)
-P-->|__call__|J(Transaction)
-J-->|__exit__\nProcess Status: Completed\nBatch Status: Completed\nIF all Batch:Processes are Completed|H
+P-->|__call__|L(Computation)
+N-->|__exit__\nProcess Status: Completed\nBatch Status: Completed\nIF all Batch:Processes are Completed|H
 I-->K(Response Packet)
-I-->L(Computation)
 L-->M(Re-Graph)
 M-->N(Update Bulletin)
 
