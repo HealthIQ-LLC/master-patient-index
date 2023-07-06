@@ -11,6 +11,14 @@ def key_gen(user: str, version: str) -> int:
     :param user: the username issuing the command
     :param version: the software version employed at the time
     :return etl_id: the unique ID created for this job
+    A few truths:
+      (1) the patient network can only be adjusted one record at a time, step-wise
+      (2) we are serializing requests, records, transactions, and patients
+        (and soon, crosswalk IDs)
+      (3) it actually makes sense to do this all along one number-line
+    This function is employed wherever a new record is staged for insertion
+    User, version, and timestamp metadata are inserted into the ETLIDSource,
+    this insertion provides the auto-incremented ID which is what's returned.
     """
     with app.app_context():
         staged_key_record = {

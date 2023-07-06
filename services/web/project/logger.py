@@ -26,7 +26,6 @@ def timeit(func):
             file=DEBUG_ROUTE
         )
         return result
-
     return wrapper
 
 
@@ -41,6 +40,7 @@ def setup_logger(name, log_file, level=logging.DEBUG):
     :param name: the repr of the location or application being logged
     :param level: the logging level (debug, ..., critical)
     :param log_file: the absolute path to the log, as a string
+    :return logger: a formatted, leveled, handled, named, and located logging object
     """
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     handler = logging.FileHandler(log_file)

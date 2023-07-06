@@ -162,6 +162,7 @@ def empi_file_bury(file_name, read_out=False):
     """
     :param file_name: the plaintext EMPI metric file to be handled
     :param read_out: set to True to get out with a file decrypt for analytics
+    :return response: the file_name of an encrypted file or the contents of a decrypted metric
     """
     with EMPIFileCrypt(file_name) as empi_file:
         response = empi_file.encrypted_file_name  # type: ignore
@@ -174,6 +175,7 @@ def empi_file_bury(file_name, read_out=False):
 def empi_file_disinter(encrypted_file_name):
     """
     :param encrypted_file_name: the encrypted EMPI metric file to be handled
+    :return decrypt: the contents of a decrypted metric
     """
     file_name = encrypted_file_name.replace('_enc_', '')
     decrypt = None

@@ -31,7 +31,9 @@ def mint_transaction_key(auditor, row=None, foreign_record_id=None) -> tuple:
     :param auditor: context management object for the transaction
     :param row: used when counting rows for a Demographics POST
     :param foreign_record_id: the source pk for a demographic record post
-    This function wraps the call to auditor.stamp()
+    :return (transaction_key, proc_id, batch_id, user, ts):
+    This function wraps the call to auditor.stamp(), which generates the process
+     ID and transaction key. Its 8 usages corresponds to each of 8 processors
     """
     ts = datetime.now()
     proc_id = auditor.stamp(row, foreign_record_id)
@@ -45,7 +47,7 @@ def transact_records(record, table: str) -> int:
     :param record: a sqla data object for insertion into a target table
     :param table: a string identifying the target table
     :return record_id: the primary key byproduct of the transaction
-    The effect of every POST is transacted here by design
+    The effect of every POST is transacted here
     """
     with app.app_context():
         db.session.add(record)
@@ -68,7 +70,7 @@ def query_records(payload: dict, endpoint="demographic") -> list:
     :param payload: a list of key/value constraints to use in filtering
     :param endpoint: a string mapped to the sqla data model of tables
     :return response: a list of rows responsive to a GET request
-    The selection of every GET request is accessed here by design
+    The selection of every GET request is accessed here
     """
     response = list()
     source_table = MODEL_MAP[endpoint]
@@ -91,7 +93,8 @@ def update_status(batch_id: int, proc_id: int, message: str):
     :param batch_id: the unique locator for the API request
     :param proc_id: the unique locator for the record-level process
     :param message: the status to store at target record location
-    This function is called to log the conclusion of each process
+    Updates the Process table with a status message. Its 8 usages corresponds
+     to each of 8 processors
     """
     with app.app_context():
         db.session.query(Process). \
@@ -330,7 +333,7 @@ def deactivate_demographic(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
-    :return transact_records(): this transacts and surfaces the transaction key
+    :return transact_records(): this transacts and surfaces a new record locator
     This processor is accessed when a demographic is Deactivated
     """
     
@@ -416,7 +419,7 @@ def delete_demographic(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
-    :return transact_records(): this transacts and surfaces the transaction key
+    :return transact_records(): this transacts and surfaces a new record locator
     This processor is accessed when a demographic is Deleted
     """
     with app.app_context():
@@ -452,7 +455,7 @@ def delete_action(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
-    :return transact_records(): this transacts and surfaces the transaction key
+    :return transact_records(): this transacts and surfaces a new record locator
     This processor is accessed when an Action is Deleted
     """
     with app.app_context():
@@ -548,7 +551,7 @@ def affirm_matching(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
-    :return transact_records(): this transacts and surfaces the transaction key
+    :return transact_records(): this transacts and surfaces a new record locator
     This processor is accessed when a Match is Affirmed
     """
     with app.app_context():
@@ -624,7 +627,7 @@ def deny_matching(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
-    :return transact_records(): this transacts and surfaces the transaction key
+    :return transact_records(): this transacts and surfaces a new record locator
     This processor is accessed when a Match is Denied
     """
     with app.app_context():

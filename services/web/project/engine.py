@@ -26,7 +26,9 @@ def parse_result(metrics: dict) -> bool:
 def toy_fine_matching(record_a, record_b) -> dict:
     """
     :param record_a: the new demographics record to be networked
-    :param record_b: one coarse match record 
+    :param record_b: one coarse match record
+    :return toy_fine_match: an object containing a "coerced-result" match
+    metric object without deterministic tests
     """
     stride = 0.3
     match_score = 0
@@ -51,7 +53,9 @@ def toy_fine_matching(record_a, record_b) -> dict:
 def fine_matching(record_a: dict, record_b: dict) -> dict:
     """
     :param record_a: the new demographics record to be networked
-    :param record_b: one coarse match record 
+    :param record_b: one coarse match record
+    :return fine_match: an object containing a match metric object
+    containing all deterministic tests
     """
     start = time()
     # ToDo: score and threshold
@@ -75,6 +79,11 @@ def fine_matching(record_a: dict, record_b: dict) -> dict:
 
 
 def toy_coarse_matching(demographic_record) -> list:
+    """
+    :param demographic_record: The input demographics record
+    :return coarse_results: a list of all the records against which the
+    new record should be compared
+    """
     record_id = demographic_record.record_id
     postal_code = demographic_record.postal_code
     name_day = demographic_record.name_day
@@ -94,13 +103,15 @@ def toy_coarse_matching(demographic_record) -> list:
     return coarse_results
 
 
-def coarse_matching(demographics_record) -> list:
+def coarse_matching(demographic_record) -> list:
     """
-    :param demographics_record: The input demographics record
+    :param demographic_record: The input demographics record
+    :return coarse_results: a list of all the records against which the new
+    record should be compared
     """
     # ToDo: implement data-aware coarse matching technique
     # This bypass leaves coarse matching in guaranteed toy mode for now
-    coarse_results = toy_coarse_matching(demographics_record)
+    coarse_results = toy_coarse_matching(demographic_record)
 
     return coarse_results
 
@@ -115,6 +126,8 @@ MODE = "toy"
 def compute_all_matches(demographic_record) -> (list, str):
     """
     :param demographic_record: The input demographics record
+    :return computed_matches, exec_time: (the list of all results for all
+    coarse matches, the duration of the computation)
     """
     coarse_matcher, fine_matcher = MODES[MODE]
     start = time()

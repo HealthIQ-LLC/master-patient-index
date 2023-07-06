@@ -9,24 +9,25 @@ from .logger import DEBUG_ROUTE, timeit, version
 from .validators import DemographicsGetValidator
 
 
+@app.route("/")
+def hello_world():
+    return jsonify(hello="world")
+
+
 @app.route("/static/<path:filename>")
 def staticfiles(filename):
     """
     :param filename: The path to a file to download
+    :return send_from_directory(): the file at the location requested
     """
     return send_from_directory(app.config["STATIC_FOLDER"], filename)
-
-
-@app.route("/")
-def hello_world():
-    return jsonify(hello="world")
 
 
 def get(payload: dict, endpoint: str) -> list:
     """
     :param payload: the user-initiated data payload to GET with
     :param endpoint: a string denoting the endpoint invoked
-    Return a list of records selected from the data model
+    :return response: a list of records selected from the data model
     """
     response = COUPLER['query_records']['processor'](payload, endpoint=endpoint)
     
@@ -37,6 +38,7 @@ def post(payload: dict, endpoint: str) -> dict:
     """
     :param payload: the user-initiated data payload to POST with
     :param endpoint: a string denoting the endpoint invoked
+    :return response: a json containing your request locator and a status message
     The auditor provides context management and threading for a POST request
     """
     user = payload['user']
@@ -64,7 +66,8 @@ def post(payload: dict, endpoint: str) -> dict:
 @timeit
 def process_payload():
     """
-    A wrapper for all requests: payload is deserialized, validated, and routed
+    :return jsonify(status, response): a JSON object containing the HTTP status and response object
+    A wrapper for all requests: payload is deserialized, validated, and routed to GET or POST
     """
     response = None
     endpoint = request.endpoint
