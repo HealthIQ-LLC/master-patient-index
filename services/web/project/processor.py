@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 import sys
@@ -81,7 +80,8 @@ def query_records(payload: dict, endpoint="demographic") -> list:
     except:
         pass
     for field_name, field_val in payload.items():
-        query = query.filter(source_table.__table__.c[field_name] == field_val)
+        query = query.\
+            filter(source_table.__table__.c[field_name] == field_val)
     for row in query.all():
         response.append(row.to_dict())
 
@@ -97,7 +97,10 @@ def update_status(batch_id: int, proc_id: int, message: str):
     """
     with app.app_context():
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_status: message}, 
                 synchronize_session=False
@@ -237,7 +240,10 @@ def activate_demographic(payload: dict, auditor) -> int:
             synchronize_session=False
         )
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: record_id}, 
                 synchronize_session=False
@@ -284,7 +290,7 @@ def activate_demographic(payload: dict, auditor) -> int:
     return graph.enterprise_id
 
 
-def archive_demographic(record_id: int, auditor):
+def archive_demographic(record_id: int, auditor) -> int:
     """
     :param record_id: the record ID of the targeted Demographic record
     :param auditor: native Auditor class object for data warehousing
@@ -306,7 +312,10 @@ def archive_demographic(record_id: int, auditor):
         archive_record = DemographicArchive(**record_to_archive)
         archive_id = transact_records(archive_record, "archive_demographic")
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: archive_id}, 
                 synchronize_session=False
@@ -317,7 +326,7 @@ def archive_demographic(record_id: int, auditor):
     return archive_id
 
 
-def deactivate_demographic(payload: dict, auditor):
+def deactivate_demographic(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
@@ -381,7 +390,10 @@ def deactivate_demographic(payload: dict, auditor):
             )
             graph()
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: record_id}, 
                 synchronize_session=False
@@ -400,7 +412,7 @@ def deactivate_demographic(payload: dict, auditor):
     return transact_records(demo_deac_record, "deactivations")
 
 
-def delete_demographic(payload: dict, auditor):
+def delete_demographic(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
@@ -416,7 +428,10 @@ def delete_demographic(payload: dict, auditor):
         Demographic.query.filter_by(record_id=record_id).delete()
         db.session.commit()
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: record_id}, 
                 synchronize_session=False
@@ -433,7 +448,7 @@ def delete_demographic(payload: dict, auditor):
     return transact_records(demo_delete_record, "demo_deletes")
 
 
-def delete_action(payload: dict, auditor):
+def delete_action(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
@@ -463,7 +478,10 @@ def delete_action(payload: dict, auditor):
             DemographicArchive.query.filter_by(record_id=record_id).delete()
             active_payload = {'record_id': record_id}
             db.session.query(Process). \
-                filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+                filter(
+                    Process.batch_id == batch_id, 
+                    Process.proc_id == proc_id
+                ). \
                 update(
                     {Process.proc_record_id: record_id}, 
                     synchronize_session=False
@@ -527,7 +545,7 @@ def delete_action(payload: dict, auditor):
     return transact_records(delete_action_record, "delete")
 
 
-def affirm_matching(payload: dict, auditor):
+def affirm_matching(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
@@ -559,7 +577,10 @@ def affirm_matching(payload: dict, auditor):
         )
         db.session.commit()
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: etl_id}, 
                 synchronize_session=False
@@ -600,7 +621,7 @@ def affirm_matching(payload: dict, auditor):
     return transact_records(affirmation_record, "affirm")
 
 
-def deny_matching(payload: dict, auditor):
+def deny_matching(payload: dict, auditor) -> int:
     """
     :param payload: a dict representing a json/dict-like record to be computed
     :param auditor: native Auditor class object for data warehousing
@@ -631,7 +652,10 @@ def deny_matching(payload: dict, auditor):
         )
         db.session.commit()
         db.session.query(Process). \
-            filter(Process.batch_id == batch_id, Process.proc_id == proc_id). \
+            filter(
+                Process.batch_id == batch_id, 
+                Process.proc_id == proc_id
+            ). \
             update(
                 {Process.proc_record_id: etl_id}, 
                 synchronize_session=False
@@ -642,7 +666,10 @@ def deny_matching(payload: dict, auditor):
         already_matched = list()
         for matched_record in recursor_low.matched_records:
             if matched_record not in already_matched:
-                print(f"{recursor.nodes_and_weights} low", file=DEBUG_ROUTE)
+                print(
+                    f"{recursor.nodes_and_weights} low", 
+                    file=DEBUG_ROUTE
+                )
                 recursor = GraphReCursor(matched_record)
                 graph = GraphCursor(
                         recursor.nodes_and_weights, 
@@ -653,7 +680,10 @@ def deny_matching(payload: dict, auditor):
                 already_matched.append(matched_record)
         for matched_record in recursor_high.matched_records:
             if matched_record not in already_matched:
-                print(f"{recursor.nodes_and_weights} high", file=DEBUG_ROUTE)
+                print(
+                    f"{recursor.nodes_and_weights} high", 
+                    file=DEBUG_ROUTE
+                )
                 recursor = GraphReCursor(matched_record)
                 graph = GraphCursor(
                         recursor.nodes_and_weights, 
