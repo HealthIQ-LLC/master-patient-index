@@ -3,7 +3,7 @@ Master Patient Index is a containerized API microservice with a PostgreSQL datab
 MPI is used to improve the interoperability of medical records by conducting entity resolution (matching) on patient records.
 Improved entity resolution on patient records is vital because medical errors are a huge cause of death in the United States. Chart errors and duplication of records has other big impacts on facilities' costs as well.
 
-MPI is conceptualized as a data warehouse using dimensional data modeling practices that sits alongside your own data pipeline. You `post` patient demographic records to the warehouse and those records are activated into the network of patient graphs. If a record is matched to any given record(s), they will share an `enterprise_id` as a unique serial number representing a patient. The `enterprise_id` is clad from the lowest ID in any group. Ongoing changes to these graphs are published to a `bulletin`.
+MPI is conceptualized as a data warehouse using dimensional data modeling practices that sits alongside your own data pipeline. You `POST` patient demographic records to the warehouse and those records are activated into the network of patient graphs. If a record is matched to any given record(s), they will share an `enterprise_id` as a unique serial number representing a patient. The `enterprise_id` is clad from the lowest ID in any group. Ongoing changes to these graphs are published to a `bulletin`.
 
 The entire service lives inside a container and your instance(s) may be placed anywhere within your cloud security perimeter easily.
 
@@ -173,7 +173,97 @@ The Docker container is built from `/`. The python package itself is in `/servic
 - `validators`: validating client payloads with custom validators which are bound to endpoints via `coupler`
 
 ---
-# Visuals
+
+# Bottomless Undo Support
+
+### Reversibility is a core concept to MPI. 
+
+We believe it makes for a far better data quality and quality control toolkit if this service supports any process of continuous and ongoing self-correction uniformly, throughout. We do this by giving every command its opposite so that literally every transaction is totally reversible. This means your patient network reflects the latest curation work by your team, and your patient charts are not waiting for a monthly, weekly, or even a daily sync.
+
+### `demographic` and `delete_demographic` and `delete_action`
+`POST` a demographic record and it will hit `activate` (see below).
+`demographic_delete`, on the other hand, will `deactivate` a record, and supply it to `archive_demographic` before deleting it from `demographic`
+`delete_action` with a payload including k=v: `batch_action='demographic'` will use the endpoint to find the target record in the `archive_demographic` table, and send it back to `demographic` via `POST` 
+
+This means a record may be added and removed and re-added, and it may be activated and deactivated.
+
+### `affirm` and `deny`
+Score-weights sampled via the deterministic matching mechanism are generated in the range of `0` to `1.0`. By hard-coded default, the match threshold is `0.5`. This is the threshold above which pairwise comparison is said to result in a match and beneath which there is determined to be no match.
+
+`affirm` is called on a `delete_action(batch_action='deny')` request and `deny` is called on a `delete_action(batch_action='affirm')` request.
+
+The actions of `affirm` and `deny` each impact the match score (score weight) by `1.0` in the `+` and `-` directions, so on their own they categorically force a matching result (either way). As opposites, `affirm` and `deny` can also effectively cancel each other out which is why ordering the Delete of one of these actions records your Delete request and then calls the opposite command. 
+
+With that in mind, this feature is designed to support a tug-of-war polling process whereby multiple clinician/operators may be given the same work list to curate with their `affirm` and `deny` responses. If you give it to three (or more) people, any result will be 1.0 for each headcount of margin and this will either enforce a match (if `affirm`) or negate a match (if `deny`) arithmetically.
+
+While `affirm` and `deny` do oppose each other naturally, twiddling them via the `delete_action` endpoint specifically unpicks a record intentionally, for QC-purposes.
+
+### `activate` and `deactivate`
+`activate` runs a record through the matching engine, and graphs it into the patient network. This includes updating the `demographic`, `activate_demographic`, `enterprise_match`, `enterprise_group`, and `bulletin` tables whenever an update or change to the network is transacted. A newly activated record may stand alone, or it may be grafted on to an existing patient graph. Where this graft occurs, the `enterprise_id` of the graph may change or it may remain the same but the newly added record will produce a `bulletin` about itself in any case.
+
+`deactivate` removes all `enterprise_match`, `enterprise_group` records where the target record is implicated, and recursively collects every record in the original patient graph and runs each one through the `GraphCursor` again, respective of the aforementioned match and group updates.   
+
+If you `activate` and then `deactivate` a record, the patient network will work as if you had never introduced the record. Meanwhile, if you `deactivate` and then `activate` a record, the patient network will include the record exactly as if it had never been deactivated. `POST` a demographic record and it will be activated by default. Delete a demographic via `delete_demographic` and the record will hit `deactivate` on the way out.  
+
+---
+
+# The Data Warehouse
+
+All four serialization tracks are provided along one number-line. Meta-data is collected via `POST` request payload hitting any endpoint, and this is inserted into the number-line source table, `ETLIDSource`, with an auto-incremented ID returning. This ID forms the primary key of a new record insertion which may be staged for any table in the model. Control over the minting of keys and the ties between them and any transactional activity supports the goals of observability and reversibility. Traversing the keys that are created unleashes numerous ways of querying, analyzing, and assessing the records in fine grain.
+
+See the wiring diagrams for the data model in the **Visuals** section below but in short: any `POST` request (one which alters the network) spawns a `batch`. One attribute of this request is the `endpoint` it came in on (referred to here as `batch_action`) and another is the `batch_key`. Any record altered as a result of a single request (remember: many records could be affected by any one request) will have that change associated to the `batch_id`. There is also a `batch_status` which goes from `PENDING` to `COMPLETED` as computational conditions are met.
+
+Meanwhile, one request may trigger a sequence of individual transactions, each on one record somewhere in the model. Each of these transactions, the atomic behavior of this service, spawns a `process`. Among the attributes of the `process` you'll find a `process_id`, its parent the `batch_id`, our internal primary key of the record, your source primary key of the record, and a `transaction_key`. The `transaction_key` is formed as follows `f'{batch_id}_{process_id}'.` The `process` record also has a `process_status` which goes from `PENDING` to a custom verb which says what just happened (eg. 'POSTED', 'ACTIVATED', 'ARCHIVED', etc., etc. etc.) by way of usages of `processor.update_status()`.
+
+The auditor hands out all of these keys from the ID source, in context, and the audit records in `Batch` and `Process` provide visibility into every distinct transaction.
+
+---
+# The `GraphCursor` and `GraphReCursor`
+
+In graph theory, a graph is constructed from nodes and edges. In MPI the nodes are patient records, and edges the match score that exists between them. The operation of MPI can thus be seen as a continuous adding, changing, and pruning these nodes and edges. The number of graphs in the network is constantly changing as are the shapes and structures of the graphs of active patients.
+
+The `GraphCursor` provides visibility, introspection, and a common process for managing data morphology in light of all the cursor features described above. The purpose of the GraphCursor is to receive a list of node-pairs and their edge-weights: being demographic record pairs and the match score between them. The `GraphCursor` reconciles the `demographic`, `enterprise_match`, `enterprise_group` and `bulletin` tables to represent changes made to the graph object it contains. In other words, all activities on the MPI are fed to the `GraphCursor` to manage updates and changes to the patient network. Whether you are adding records, activating them, and affirming matches, or doing subtractive work like deactivating and denying, this is driven by manipulating a graph object and subsequently transacting on all those tables to enact your changes. This permits workflows that contain review and deferred execution. The cursor even has a `__str__` method so you can look at the contents of a graph. There is also a function called `store_graph_image` which returns a graph visual.  
+
+Here is what printing a graph object looks like:
+
+`<GraphCursor: 3 | 6 records | 15 edges | 9 matches>`
+
+This graph has an `enterprise_id` of 3, and of the 15 edges that exist between 6 records, 8 of those edges are above the match threshold in score-weight.
+
+This is what `nodes_and_weights` looks like for this graph. You're seeing (low, low) record IDs and match-weights packed into tuples.
+
+>`nodes_and_weights = [(3,4,0.8), (3,5,1.4), (4,5,0.8), (3,6,0.4), (4,6,0.4), (5,6,0.8), (3,7,0.4), (4,7,0.4), (5,7,0.8), (6,7,0.8), (3,8,0.4), (4,8,0.4), (5,8,0.8), (6,8,0.8), (7,8,0.8),]`
+> 
+>`graph = GraphCursor(nodes_and_weights, 1, 2)`
+> 
+>`print(graph)`
+> 
+>`graph.store_graph_image()`
+
+Because the graph above has an `enterprise_id` of 3, you find it under that filename. By default, score-weights above the matching threshold are drawn in green, while non-matches are drawn in dotted red. The score-weight is shown. (the score of 1.4 reflects a hypothetical `Affirm`) The nodes or demographics themselves are drawn as blue dots and the number printed over them is their `record_id`. These charts are all produced with a fixed `seed` so that--for the same data--they are always arranged the same way, keeping them stable as you examine them and adjust them over time.  
+
+<p align="center">
+<img src="https://jonreznick.com/img/3.jpg">
+</p>
+
+I arbitrarily designed this data so that record 5 would be highly central and of huge degree to the graph, such that removing it splits the graph. That's because splitting up and healing these graphs is the ongoing business of this software. Suppose we down-weight all matches with record 5, so it is no longer central to the graph: 
+
+<p align="center">
+<img src="https://jonreznick.com/img/3b.jpg">
+</p>
+
+`<GraphCursor: 3 | 6 records | 15 edges | 4 matches>`
+
+Technically, you are still on graph 3, which is record 3 matched to record 4. But this change has also spawned two new graphs: a graph for [5] and one for [6,7,8]. The reverse can also happen if you view the above two images in the opposite order, as record 5 being given `affirm`s to 3, 4, 6, 7 and or 8 and one graph being "healed" from many. This relates to why full reversibility is so important to this product. How do we manage this change through all the (pretty mind-bending) implications?
+
+The `GraphReCursor` was built for this. Its job is to take a single `record_id` as a parameter and to recursively select (or recur over) the records that are graphed to a given record--producing a set of `nodes_and_weights` to be run through the `GraphCursor`. If you look at the record IDs implicated in the graphs above, you might treat them all as a list of affected records. By making changes and then recurring over each potentially affected record, you detect and furnish publication on the set of all the impacts a given change has on the patient network in a way that is collectively exhaustive. The `GraphCursor` and `GraphReCursor` are designed to work together in this fashion, such that running records through the `GraphCursor` is idempotent. 
+
+Imagine applying a `deny` to a match record. The software will recur on each of the two formerly matched records distinctly, and run everything picked up through the `GraphCursor`. Denying a match may split the graph, but also even if non-matched, two records may remain in a graph together via other edges. While the processes in this system are broken down to the atomic level, any one transaction on one record can potentially affect any number of other records, necessitating further transactions. This is where record locators like `transaction_key` become vital. The implicated changes will all share this key. It is these features in concert that allow not just the range of activities you enact but also their networked implications to become reversible. 
+
+This provides a frictionless and non-destructible surface for curating data.  
+
+---
+# Flow Charts
 
 ## Request Flow
 ```mermaid
@@ -205,7 +295,7 @@ A(Any Customer)-->|JSON Request|B[API Service]-->|Get or Post: Deserialize, Vali
 B-->|JSON Response|A
 ```
 
-If you post a new record, the response object gives you a record locator you can later use to check the `Bulletin` upon confirming your `Batch` is complete. Essentially, after your initial `POST`, you come back with your record locators and make `GET` requests to acquire pertinent network updates.
+If you `POST` a new record, the response object gives you a record locator you can later use to check the `Bulletin` upon confirming your `Batch` is complete. Essentially, after your initial `POST`, you come back with your record locators and make `GET` requests to acquire pertinent network updates.
 
 ## API Commands Flow
 ```mermaid
@@ -226,7 +316,7 @@ O(Delete Deny*)-->A
 P(Delete Delete Demographic*)-->|Archived Record Found|M
 F-->|For each record changed|Q(Update Bulletin)
 ```
-(*) Corresponds to an endpoint supporting POST
+(*) Corresponds to an endpoint supporting `POST`
 
 This system of cursoring over demographic records as Nodes and match records as Edges makes heavy re-use of itself such that all supported commands fall along this flow-chart. 
 
