@@ -1,6 +1,5 @@
 # `master-patient-index`
-Master Patient Index is a containerized API microservice with a PostgreSQL database
-MPI is used to improve the interoperability of medical records by conducting entity resolution (matching) on patient records.
+Master Patient Index is a containerized API microservice with a PostgreSQL database. MPI is used to improve the interoperability of medical records by conducting entity resolution (matching) on patient records.
 Improved entity resolution on patient records is vital because medical errors are a huge cause of death in the United States. Chart errors and duplication of records has other big impacts on facilities' costs as well.
 
 MPI is conceptualized as a data warehouse using dimensional data modeling practices that sits alongside your own data pipeline. You `POST` patient demographic records to the warehouse and those records are activated into the network of patient graphs. If a record is matched to any given record(s), they will share an `enterprise_id` as a unique serial number representing a patient. The `enterprise_id` is clad from the lowest ID in any group. Ongoing changes to these graphs are published to a `bulletin`.
@@ -211,7 +210,7 @@ If you `activate` and then `deactivate` a record, the patient network will work 
 
 All four serialization tracks are provided along one number-line. Meta-data is collected via `POST` request payload hitting any endpoint, and this is inserted into the number-line source table, `ETLIDSource`, with an auto-incremented ID returning. This ID forms the primary key of a new record insertion which may be staged for any table in the model. Control over the minting of keys and the ties between them and any transactional activity supports the goals of observability and reversibility. Traversing the keys that are created unleashes numerous ways of querying, analyzing, and assessing the records in fine grain.
 
-See the wiring diagrams for the data model in the **Visuals** section below but in short: any `POST` request (one which alters the network) spawns a `batch`. One attribute of this request is the `endpoint` it came in on (referred to here as `batch_action`) and another is the `batch_key`. Any record altered as a result of a single request (remember: many records could be affected by any one request) will have that change associated to the `batch_id`. There is also a `batch_status` which goes from `PENDING` to `COMPLETED` as computational conditions are met.
+See the wiring diagrams for the data model in the **Flow Charts** section below but in short: any `POST` request (one which alters the network) spawns a `batch`. One attribute of this request is the `endpoint` it came in on (referred to here as `batch_action`) and another is the `batch_key`. Any record altered as a result of a single request (remember: many records could be affected by any one request) will have that change associated to the `batch_id`. There is also a `batch_status` which goes from `PENDING` to `COMPLETED` as computational conditions are met.
 
 Meanwhile, one request may trigger a sequence of individual transactions, each on one record somewhere in the model. Each of these transactions, the atomic behavior of this service, spawns a `process`. Among the attributes of the `process` you'll find a `process_id`, its parent the `batch_id`, our internal primary key of the record, your source primary key of the record, and a `transaction_key`. The `transaction_key` is formed as follows `f'{batch_id}_{process_id}'.` The `process` record also has a `process_status` which goes from `PENDING` to a custom verb which says what just happened (eg. 'POSTED', 'ACTIVATED', 'ARCHIVED', etc., etc. etc.) by way of usages of `processor.update_status()`.
 
@@ -228,7 +227,7 @@ Here is what printing a graph object looks like:
 
 `<GraphCursor: 3 | 6 records | 15 edges | 9 matches>`
 
-This graph has an `enterprise_id` of 3, and of the 15 edges that exist between 6 records, 8 of those edges are above the match threshold in score-weight.
+This graph has an `enterprise_id` of 3, and of the 15 edges that exist between 6 records, 9 of those edges are above the match threshold in score-weight.
 
 This is what `nodes_and_weights` looks like for this graph. You're seeing (low, low) record IDs and match-weights packed into tuples.
 
