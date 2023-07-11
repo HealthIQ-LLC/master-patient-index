@@ -1,6 +1,9 @@
+from .crosswalk import CROSSWALK_MAP
 from .model import MODEL_MAP
 from .processor import PROCESSOR_MAP
 from .validators import (
+    CrossWalkValidator,
+    CrossWalkBindValidator,
     DeleteActionValidator,
     DemographicsPostValidator,
     MatchValidator,
@@ -58,7 +61,7 @@ COUPLER = {
         'validator': MatchValidator,
         'methods': ['GET', 'POST'],
     },
-    'enterprise_group': {
+    'enterprise_group': {  # ToDo: GET validator for ETL ID
         'model': MODEL_MAP['enterprise_group'],
         'processor': None,
         'validator': None,
@@ -69,6 +72,42 @@ COUPLER = {
         'processor': None,
         'validator': None,
         'methods': ['GET'],
+    },
+    'add_crosswalk': {
+        'model': MODEL_MAP['crosswalk'],
+        'processor': CROSSWALK_MAP['add_crosswalk'],
+        'validator': CrossWalkValidator,
+        'methods': ['GET', 'POST'],
+    },
+    'add_crosswalk_bind': {
+        'model': MODEL_MAP['crosswalk_bind'],
+        'processor': CROSSWALK_MAP['add_crosswalk_bind'],
+        'validator': CrossWalkBindValidator,
+        'methods': ['GET', 'POST'],
+    },
+    'activate_crosswalk': {
+        'model': MODEL_MAP['crosswalk'],
+        'processor': CROSSWALK_MAP['activate_crosswalk'],
+        'validator': CrossWalkValidator,
+        'methods': ['GET', 'POST'],
+    },
+    'deactivate_crosswalk': {
+        'model': MODEL_MAP['crosswalk'],
+        'processor': CROSSWALK_MAP['deactivate_crosswalk'],
+        'validator': CrossWalkValidator,
+        'methods': ['GET', 'POST'],
+    },
+    'activate_crosswalk_bind': {
+        'model': MODEL_MAP['crosswalk_bind'],
+        'processor': CROSSWALK_MAP['activate_crosswalk_bind'],
+        'validator': CrossWalkBindValidator,
+        'methods': ['GET', 'POST'],
+    },
+    'deactivate_crosswalk_bind': {
+        'model': MODEL_MAP['crosswalk_bind'],
+        'processor': CROSSWALK_MAP['deactivate_crosswalk_bind'],
+        'validator': CrossWalkBindValidator,
+        'methods': ['GET', 'POST'],
     },
     'batch': {
         'model': MODEL_MAP['batch'],

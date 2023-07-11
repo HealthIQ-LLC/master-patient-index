@@ -59,6 +59,10 @@ def transact_records(record, table: str) -> int:
             record_id = record.batch_id
         elif table == "process":
             record_id = record.proc_id
+        elif table == "crosswalk":
+            record_id = record.crosswalk_id
+        elif table == "crosswalk_bind":
+            record_id = record.bind_id
         else:
             record_id = record.etl_id
 

@@ -68,7 +68,7 @@ class Demographic(db.Model, SerializerMixin):
     composite_name = db.Column(db.Text)
     composite_name_day_postal_code = db.Column(db.Text)
     is_active = db.Column(db.Boolean)
-    transaction_key = db.Column(db.Text)
+    transaction_key = db.Column(db.Text, index=True)
     source_key = db.Column(db.Text)
     source_value = db.Column(db.Text)
     touched_by = db.Column(db.Text)
@@ -107,7 +107,7 @@ class DemographicArchive(db.Model, SerializerMixin):
     composite_name_day_postal_code = db.Column(db.Text)
     is_active = db.Column(db.Boolean)
     archive_transaction_key = db.Column(db.Text)
-    transaction_key = db.Column(db.Text)
+    transaction_key = db.Column(db.Text, index=True)
     source_key = db.Column(db.Text)
     source_value = db.Column(db.Text)
     touched_by = db.Column(db.Text)
@@ -197,7 +197,7 @@ class Telecom(db.Model, SerializerMixin):
     telecoms_type = db.Column(db.Text)
     telecoms_subtype = db.Column(db.Text)
     telecoms_value = db.Column(db.Text)
-    transaction_key = db.Column(db.Text)
+    transaction_key = db.Column(db.Text, index=True)
     touched_by = db.Column(db.Text)
     touched_ts = db.Column(db.DateTime)
 
@@ -233,12 +233,44 @@ class EnterpriseMatch(db.Model, SerializerMixin):
     touched_ts = db.Column(db.DateTime)
 
 
+# the record of a foreign key-system brought in with demographic records
+class Crosswalk(db.Model, SerializerMixin):
+    __tablename__ = "crosswalk"
+    __table_args__ = (
+        db.UniqueConstraint(
+            'crosswalk_name',
+            'key_name',
+            name='crosswalk_key_constraint'
+        ),
+    )
+    crosswalk_id = db.Column(db.BigInteger, primary_key=True)
+    crosswalk_name = db.Column(db.Text)
+    key_name = db.Column(db.Text)
+    is_active = db.Column(db.Boolean)
+    transaction_key = db.Column(db.Text, index=True)
+    touched_by = db.Column(db.Text)
+    touched_ts = db.Column(db.DateTime)
+
+
+class CrosswalkBind(db.Model, SerializerMixin):
+    __tablename__ = "crosswalk_bind"
+    bind_id = db.Column(db.BigInteger, primary_key=True)
+    crosswalk_id = db.Column(db.BigInteger)
+    batch_id = db.Column(db.BigInteger)
+    is_active = db.Column(db.Boolean)
+    transaction_key = db.Column(db.Text, index=True)
+    touched_by = db.Column(db.Text)
+    touched_ts = db.Column(db.DateTime)
+
+
 # Data-model dependencies are shipped with this map
 MODEL_MAP = {
     "activate_demographic": DemographicActivation,
     "archive_demographic": DemographicArchive,
     "batch": Batch,
     "bulletin": Bulletin,
+    "crosswalk": Crosswalk,
+    "crosswalk_bind": CrosswalkBind,
     "deactivate_demographic": DemographicDeactivation,
     "delete_action": Delete,
     "delete_demographic": DemographicDelete,

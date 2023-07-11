@@ -135,22 +135,29 @@ As of now, there is no helpdesk automation or administration for issues, tickets
 
 `POST` requests alter the patient network using processors uniquely dedicated to each endpoint, while `GET` requests provide visibility throughout the entire data model.
 
-| Name                   | Route (`'/api_{version}/'...`) | Methods           |      
-|------------------------|--------------------------------|-------------------|
-| Activate Demographic   | `'activate_demographic'`       | `['GET', 'POST']` |
-| Archive Demographic    | `'archive_demographic'`        | `['GET']`         |
-| Deactivate Demographic | `'deactivate_demographic'`     | `['GET', 'POST']` |
-| Delete Action          | `'delete_action'`              | `['GET', 'POST']` |
-| Delete Demographic     | `'delete_demographic'`         | `['GET', 'POST']` |
-| Demographic            | `'demographic'`                | `['GET', 'POST']` |
-| Affirm Match           | `'match_affirm'`               | `['GET', 'POST']` |
-| Deny Match             | `'match_deny'`                 | `['GET', 'POST']` |
-| Enterprise Group       | `'enterprise_group'`           | `['GET']`         |
-| Enterprise Match       | `'enterprise_match'`           | `['GET']`         |
-| Batch                  | `'batch'`                      | `['GET']`         |
-| Bulletin               | `'bulletin'`                   | `['GET']`         |
-| Process                | `'process'`                    | `['GET']`         |
-| ID Source              | `'etl_id_source'`              | `['GET']`         |
+| Name                      | Route (`'/api_{version}/'...`) | Methods           |      
+|---------------------------|--------------------------------|-------------------|
+| Activate Demographic      | `'activate_demographic'`       | `['GET', 'POST']` |
+| Archive Demographic       | `'archive_demographic'`        | `['GET']`         |
+| Deactivate Demographic    | `'deactivate_demographic'`     | `['GET', 'POST']` |
+| Delete Action             | `'delete_action'`              | `['GET', 'POST']` |
+| Delete Demographic        | `'delete_demographic'`         | `['GET', 'POST']` |
+| Demographic               | `'demographic'`                | `['GET', 'POST']` |
+| Affirm Match              | `'match_affirm'`               | `['GET', 'POST']` |
+| Deny Match                | `'match_deny'`                 | `['GET', 'POST']` |
+| Enterprise Group          | `'enterprise_group'`           | `['GET']`         |
+| Enterprise Match          | `'enterprise_match'`           | `['GET']`         |
+| Batch                     | `'batch'`                      | `['GET']`         |
+| Bulletin                  | `'bulletin'`                   | `['GET']`         |
+| Process                   | `'process'`                    | `['GET']`         |
+| ID Source                 | `'etl_id_source'`              | `['GET']`         |
+| Add Crosswalk             | `'add_crosswalk'`              | `['GET', 'POST']` |
+| Activate Crosswalk        | `'activate_crosswalk'`         | `['GET', 'POST']` |
+| Deactivate Crosswalk      | `'deactivate_crosswalk'`       | `['GET', 'POST']` |
+| Add Crosswalk Bind        | `'add_crosswalk_bind'`         | `['GET', 'POST']` |
+| Activate Crosswalk Bind   | `'activate_crosswalk_bind'`    | `['GET', 'POST']` |
+| Deactivate Crosswalk Bind | `'deactivate_crosswalk_bind'`  | `['GET', 'POST']` |
+
 
 ---
 # Code Tour
@@ -161,6 +168,7 @@ The Docker container is built from `/`. The python package itself is in `/servic
 - `app`: Flask `app` object is created and configured
 - `auditor`: supplies a callable context-manager to trace all transactions
 - `coupler`: intentional coupling of data model, data processor, payload validator, and supported protocol methods
+- `crosswalk`: a set of processors for maintaining a foreign-key ID crosswalk 
 - `crypto_s3`: an encrypted getter/setter for handling metric results data. Not fully implemented and not tested at this time
 - `data_utils`: some helper functions for handling data idiomatically
 - `engine`: match-computation is orchestrated here, metrics result
@@ -260,6 +268,17 @@ The `GraphReCursor` was built for this. Its job is to take a single `record_id` 
 Imagine applying a `deny` to a match record. The software will recur on each of the two formerly matched records distinctly, and run everything picked up through the `GraphCursor`. Denying a match may split the graph, but also even if non-matched, two records may remain in a graph together via other edges. While the processes in this system are broken down to the atomic level, any one transaction on one record can potentially affect any number of other records, necessitating further transactions. This is where record locators like `transaction_key` become vital. The implicated changes will all share this key. It is these features in concert that allow not just the range of activities you enact but also their networked implications to become reversible. 
 
 This provides a frictionless and non-destructible surface for curating data.  
+
+---
+# The ID Crosswalk
+
+When you `POST` demographics, there is a feature that lets you supply a `foreign_record_id`--that being the primary key at your record source. With this feature you may define a `crosswalk` by giving it a `crosswalk_name` and by defining the name of the primary key (e.g. `patientid`) at your source via `POST`. 
+
+For example: `{'crosswalk_name': 'Athena', 'key_name': 'patientid'}`.
+
+These `crosswalk` additions are used in tandem with `crosswalk_bind` commands. While the `crosswalk` records are maintained as a largely stable inventory of your sources, `binds` link a given `batch` of records to a given `crosswalk`. Plainly, this is recording declaratively that a given `POST` came from a given source. 
+
+By providing this information along a formal dimension, customers may interact with the patient network using any point of entry. Further, network access may be intentionally restricted according to defined source(s). 
 
 ---
 # Flow Charts
@@ -503,4 +522,26 @@ erDiagram
         string version
         datetime id_created_ts
     }    
+```
+## ID Cross-Walk
+```mermaid
+erDiagram
+    Crosswalk {
+        int crosswalk_id
+        string crosswalk_name
+        string key_name
+        bool is_active
+        string transaction_key
+        string touched_by
+        datetime touched_ts
+    }
+    CrosswalkBind {
+        int bind_id
+        int crosswalk_id
+        int batch_id
+        bool is_active
+        string transaction_key
+        string touched_by
+        datetime touched_ts
+    }
 ```
