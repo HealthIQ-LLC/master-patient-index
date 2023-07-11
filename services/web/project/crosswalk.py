@@ -43,7 +43,7 @@ def deactivate_crosswalk(payload: dict, auditor):
     with app.app_context():
         crosswalk_id = payload.get("crosswalk_id")
         db.session.query(Crosswalk). \
-            filter(Crosswalk.instruction_id == crosswalk_id,
+            filter(Crosswalk.crosswalk_id == crosswalk_id,
                    Crosswalk.is_active is True). \
             update(
             {
@@ -65,7 +65,7 @@ def activate_crosswalk(payload: dict, auditor):
     with app.app_context():
         crosswalk_id = payload.get("crosswalk_id")
         db.session.query(Crosswalk). \
-            filter(Crosswalk.instruction_id == crosswalk_id,
+            filter(Crosswalk.crosswalk_id == crosswalk_id,
                    Crosswalk.is_active is False). \
             update(
             {
@@ -92,7 +92,7 @@ def add_crosswalk_bind(payload: dict, auditor):
         crosswalk_id = payload.get("crosswalk_id")
         batch_id = payload.get("crosswalk_id")
         transaction_key, _, _, user, ts = mint_transaction_key(auditor)
-        staged_crosswalk_instruction = {
+        staged_crosswalk_bind = {
             "bind_id": key_gen(user, auditor.version),
             "crosswalk_id": crosswalk_id,
             "batch_id": batch_id,
@@ -101,10 +101,10 @@ def add_crosswalk_bind(payload: dict, auditor):
             'touched_by': user,
             'touched_ts': ts
         }
-        crosswalk_instruction_record = \
-            CrosswalkInstruction(**staged_crosswalk_instruction)  # type: ignore
+        crosswalk_bind_record = \
+            CrosswalkBind(**staged_crosswalk_bind)  # type: ignore
 
-        return transact_records(crosswalk_instruction_record, "crosswalk_bind")
+        return transact_records(crosswalk_bind_record, "crosswalk_bind")
 
 
 def deactivate_crosswalk_bind(payload: dict, auditor):
@@ -114,9 +114,9 @@ def deactivate_crosswalk_bind(payload: dict, auditor):
     This processor is accessed when a bind is deactivated
     """
     with app.app_context():
-        instruction_id = payload.get("instruction_id")
+        bind_id = payload.get("bind_id")
         db.session.query(CrosswalkBind). \
-            filter(CrosswalkBind.instruction_id == instruction_id,
+            filter(CrosswalkBind.bind_id == bind_id,
                    CrosswalkBind.is_active is True). \
             update(
             {
@@ -136,9 +136,9 @@ def activate_crosswalk_bind(payload: dict, auditor):
     This processor is accessed when a bind is activated
     """
     with app.app_context():
-        instruction_id = payload.get("instruction_id")
+        bind_id = payload.get("bind_id")
         db.session.query(CrosswalkBind). \
-            filter(CrosswalkBind.instruction_id == instruction_id,
+            filter(CrosswalkBind.bind_id == bind_id,
                    CrosswalkBind.is_active is False). \
             update(
             {

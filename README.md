@@ -272,13 +272,13 @@ This provides a frictionless and non-destructible surface for curating data.
 ---
 # The ID Crosswalk
 
-When you `POST` demographics, there is a feature that lets you supply a `foreign_record_id`--that being the primary key at your record source. With this feature you may define a `crosswalk` by giving it a `crosswalk_name` and by defining the name of the primary key (e.g. `patientid`) at your source via `POST`. 
+When you `POST` demographics, there is a feature that lets you supply a `foreign_record_id` for each record--that being the primary key at your record source. With this feature you may define a `crosswalk` by giving it a `crosswalk_name` and by defining the name of the primary key (e.g. `patientid`) at your source via `POST`. 
 
 For example: `{'crosswalk_name': 'Athena', 'key_name': 'patientid'}`.
 
-These `crosswalk` additions are used in tandem with `crosswalk_bind` commands. While the `crosswalk` records are maintained as a largely stable inventory of your sources, `binds` link a given `batch` of records to a given `crosswalk`. Plainly, this is recording declaratively that a given `POST` came from a given source. 
+These `crosswalk` additions are used in tandem with `crosswalk_bind` commands. While the `crosswalk` records are maintained as a largely stable inventory of your sources, `binds` link a given `batch` of records to a given `crosswalk`. Plainly, this is recording declaratively that a given `POST` came from a given source. This goes further than stating a name in a field, it wires up dimensional access to any foreign ID system as a feature of the patient network. 
 
-By providing this information along a formal dimension, customers may interact with the patient network using any point of entry. Further, network access may be intentionally restricted according to defined source(s). 
+By providing this information along a formal dimension, customers may interact with the patient network using any point of entry, including the IDs they may handle via any system. Further, network access may be intentionally restricted according to defined source(s) as a means of taxonomical access control. 
 
 ---
 # Flow Charts

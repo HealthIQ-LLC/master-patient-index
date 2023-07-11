@@ -256,7 +256,7 @@ class CrosswalkBind(db.Model, SerializerMixin):
     __tablename__ = "crosswalk_bind"
     bind_id = db.Column(db.BigInteger, primary_key=True)
     crosswalk_id = db.Column(db.BigInteger)
-    batch_id = db.Column(db.BigInteger)
+    batch_id = db.Column(db.BigInteger, unique=True)
     is_active = db.Column(db.Boolean)
     transaction_key = db.Column(db.Text, index=True)
     touched_by = db.Column(db.Text)
