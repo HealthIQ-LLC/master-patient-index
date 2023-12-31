@@ -1,6 +1,6 @@
 # `master-patient-index`
 Master Patient Index is a containerized API microservice with a PostgreSQL database. MPI is used to improve the interoperability of medical records by conducting entity resolution (matching) on patient records.
-Improved entity resolution on patient records is vital because medical errors are a huge cause of death in the United States. Chart errors and duplication of records has other big impacts on facilities' costs as well.
+Improved entity resolution on patient records is vital because medical errors are a huge cause of death in the United States. Chart errors and duplication of records have other big impacts on facilities' costs as well.
 
 MPI is conceptualized as a data warehouse using dimensional data modeling practices that sits alongside your own data pipeline. You `POST` patient demographic records to the warehouse and those records are activated into the network of patient graphs. If a record is matched to any given record(s), they will share an `enterprise_id` as a unique serial number representing a patient. The `enterprise_id` is clad from the lowest ID in any group. Ongoing changes to these graphs are published to a `bulletin`.
 
@@ -281,6 +281,24 @@ These `crosswalk` additions are used in tandem with `crosswalk_bind` commands. W
 By providing this information along a formal dimension, customers may interact with the patient network using any point of entry, including the IDs they may handle via any system. Further, network access may be intentionally restricted according to defined source(s) as a means of taxonomical access control. 
 
 ---
+# The Variable Score Weighting System
+A Score Condition is an expression which identifies a Demographic key (eg. `first_name`), a given output metric from the pairwise deterministic battery we conducted (eg `levenshtein_distance`), a given comparison operator (eg. `=='`, a given threshold of comparison (eg. `3`), a given threshold type which matches the data-type of the threshold (to supply the correct operators downstream we would herein note an `int` in this example case).
+
+This `condition` identifies the metric location at the coordinate `['first_name']['levenshtein_distance']` and the `condition` is satisfied if the value found there is equal to 3.
+
+A Score Affect is just a means of altering your match score according to a certain arithmetic expression. For example, an `affect` might perform `x += 2` or `x *= 0.2` or any arithmetic in the form `x operator y` at all, leaving x precisely altered by the desired operation.
+
+A Score Bind connects a Condition with an Affect. So that say if `['first_name']['levenshtein_distance'] == 3` and a `bind` to an `affect` including `x *= 0.2` is active, then your score might be impacted here as `x *= 0.2`. 
+
+Not only are `conditions` and `affects` completely re-usable in non-exclusive/non-exhaustive ways, there is one last major concept here:
+
+Score Sets allow you to assemble `binds` into ordered logical expressions using `AND`, `OR`, and `XOR` so that the `affect` may be `bound` to the result of the Score Set in addition to or rather than the `affect` being `bound` to the individual `condition(s)`. 
+
+Because of how the serialization number-line works, and because of how `sets` are designed, the `set` table does not function merely pair `binds` with operators--you can also pair off `sets` themselves with operators, providing recursive support.
+
+The meaning of this is you get support for parenthetical enclosure of your arithmetic. `(a or b) and c` is a `set` containing a `set` and a `bind` together in grain. So you can make `sets` out of `sets` all the way down, directing hierarchical operations of comparison to any tree depth you require in order to account for your data. 
+
+---
 # Flow Charts
 
 ## Request Flow
@@ -288,8 +306,7 @@ By providing this information along a formal dimension, customers may interact w
 graph TD
 A[Request with payload]-->B(Deserialize Payload)
 B-->C(Validate Payload)
-C-->D(Encounter Service Endpoint)
-D-->E{Payload Processor}
+C-->E{Payload Processor}
 E-->|GET| F(`query_records`)
 F-->G[List of records]
 E-->|POST| H[Auditor]
@@ -299,8 +316,7 @@ I-->P(Create Process ID)
 P-->|__call__\nProcess Status: Pending|L(Computation)
 N-->|__exit__\nProcess Status: Completed\nBatch Status: Completed\nIF all Batch:Processes are Completed|H
 I-->K(Response Packet)
-L-->M(Re-Graph)
-M-->N(Update Bulletin)
+L-->N(Update Bulletin)
 
 ```
 

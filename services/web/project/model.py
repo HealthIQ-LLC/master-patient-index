@@ -151,7 +151,7 @@ class Bulletin(db.Model, SerializerMixin):
 
 
 # the record of processes spawned by API requests
-class Process(db.Model, SerializerMixin):  
+class Process(db.Model, SerializerMixin):
     __tablename__ = "process"
     proc_id = db.Column(db.BigInteger, primary_key=True)
     batch_id = db.Column(db.BigInteger)
@@ -263,6 +263,25 @@ class CrosswalkBind(db.Model, SerializerMixin):
     touched_ts = db.Column(db.DateTime)
 
 
+class Battery(db.Model, SerializerMixin):
+    __tablename__ = "score_battery"
+    battery_id = db.Column(db.BigInteger, primary_key=True)
+    test_id = db.Column(db.BigInteger)
+    touched_by = db.Column(db.Text)
+    touched_ts = db.Column(db.DateTime)
+
+
+class Test(db.Model, SerializerMixin):
+    __tablename__ = "score_test"
+    test_id = db.Column(db.BigInteger, primary_key=True)
+    metric = db.Column(db.Text)
+    threshold = db.Column(db.Text)  # storing a bool or a numeric
+    operator = db.Column(db.Text)
+    weight = db.Column(db.Float)
+    touched_by = db.Column(db.Text)
+    touched_ts = db.Column(db.DateTime)
+
+
 # Data-model dependencies are shipped with this map
 MODEL_MAP = {
     "activate_demographic": DemographicActivation,
@@ -281,5 +300,7 @@ MODEL_MAP = {
     "match_affirm": MatchAffirmation,
     "match_deny": MatchDenial,
     "process": Process,
-    "telecom": Telecom,
+    "score_battery": Battery,
+    "score_test": Test,
+    "telecom": Telecom
 }
